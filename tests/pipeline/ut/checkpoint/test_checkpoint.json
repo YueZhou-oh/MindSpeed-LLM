@@ -1,0 +1,232 @@
+{
+    "test_deepseek2_hf2mcore_tp1pp4ep8": [
+        {
+            "param": {
+                "load-model-type":"hf",
+                "save-model-type":"mg",
+                "target-tensor-parallel-size": "1",
+                "target-pipeline-parallel-size": "4",
+                "target-expert-parallel-size": "8",
+                "num-layers-per-virtual-pipeline-stage": "1",
+                "load-dir":"/data/ci/models/deepseek-v2/hf/deepseek2_hf",
+                "save-dir":"/data/ci/cache/deepseek2_tp1pp4ep8",
+                "moe-grouped-gemm": null,
+                "model-type-hf": "deepseek2"
+            }
+        }
+    ],
+    "test_deepseek2_mcore2hf_tp1pp4ep8": [
+        {
+            "param": {
+                "load-model-type":"mg",
+                "save-model-type": "hf",
+                "target-tensor-parallel-size": "1",
+                "target-pipeline-parallel-size": "1",
+                "target-expert-parallel-size": "1",
+                "save-dir":"/data/ci/cache/deepseek2_tp1pp4ep8-hf",
+                "load-dir":"/data/ci/cache/deepseek2_tp1pp4ep8",
+                "moe-grouped-gemm": null,
+                "model-type-hf": "deepseek2",
+                "_reference_dir": "/data/ci/models/deepseek-v2/hf/deepseek2_hf"
+            }
+        }
+    ],
+
+    "test_qwen25_hf2mcore_tp4pp2dpp": [
+        {
+            "param": {
+                "load-model-type":"hf",
+                "save-model-type":"mg",
+                "target-tensor-parallel-size": "4",
+                "target-pipeline-parallel-size": "2",
+                "load-dir":"/data/ci/models/qwen25/hf/Qwen2.5-7B",
+                "save-dir":"/data/ci/cache/Qwen2.5-mg",
+                "num-layer-list": "7,21",
+                "model-type-hf": "qwen25"
+            }
+        }
+    ],
+
+    "test_qwen25_mcore2hf_tp4pp2dpp": [
+        {
+            "param": {
+                "load-model-type":"mg",
+                "save-model-type":"hf",
+                "target-tensor-parallel-size": "1",
+                "target-pipeline-parallel-size": "1",
+                "load-dir":"/data/ci/cache/Qwen2.5-mg",
+                "save-dir":"/data/ci/cache/Qwen2.5-mg-hf",
+                "num-layer-list": "7,21",
+                "model-type-hf": "qwen25",
+                "_reference_dir": "/data/ci/models/qwen25/hf/Qwen2.5-7B"
+            }
+        }
+    ],
+
+    "test_llama3_noop_layer_hf2mg": [
+        {
+            "param": {
+                "model-type-hf": "llama2",
+                "load-model-type":"hf",
+                "save-model-type": "mg",
+                "target-tensor-parallel-size": "2",
+                "target-pipeline-parallel-size": "2",
+                "save-dir":"/data/ci/cache/llama-3-8b-hf-nooplayer-tp2pp2vpp2-mcore-test/",
+                "load-dir":"/data/ci/models/llama3/hf/llama-3-8b-hf-layer14/",
+                "num-layers-per-virtual-pipeline-stage": "2",
+                "noop-layers": "1,15"
+            }
+        },
+        {
+            "Base_MD5": [
+                "afc12a040f5fee37",
+                "8f499f13db04194f",
+                "519d8f41924e3268",
+                "4cab23d03d0edcac"
+            ]
+        }
+    ],
+
+    "test_llama2_merge_lora2hf_tp2pp4": [
+        {
+            "param": {
+                "model-type-hf": "llama2",
+                "load-model-type":"mg",
+                "save-model-type": "hf",
+                "target-tensor-parallel-size": "2",
+                "target-pipeline-parallel-size": "4",
+                "save-dir":"/data/ci/cache/llama2_merge_lora_mcore-hf/",
+                "load-dir":"/data/ci/models/llama2/mg/Llama2_mcore_l4tp4pp2/",
+                "lora-load":"/data/ci/models/llama2/mg/llama2_l4_tp4pp2_lora/",
+                "lora-r":"16",
+                "lora-alpha":"32",
+                "lora-target-modules":"linear_qkv linear_proj linear_fc1 linear_fc2"
+            }
+        },
+        {
+            "Base_MD5": [
+                "c7c04203b925f0f01744cd78a92dbff3",
+                "622cf11bffb3672dc4ee2ce60c135002",
+                "dd796f36789f61af9f3acaf7ca174774",
+                "49a6e38c829fd09cb7a04a5a79bf7f1f"
+            ]
+        }
+    ],
+
+    "test_deepseek2_lite_hf2mcore_tp1pp1ep8": [
+        {
+            "param": {
+                "load-model-type":"hf",
+                "save-model-type":"mg",
+                "target-tensor-parallel-size": "1",
+                "target-pipeline-parallel-size": "1",
+                "target-expert-parallel-size": "8",
+                "load-dir":"/data/ci/models/deepseek2-lite/hf/deepseek2_lite_hf",
+                "save-dir":"/data/ci/cache/deepseek2_lite_mg",
+                "model-type-hf": "deepseek2-lite"
+            }
+        }
+    ],
+
+    "test_deepseek2_lite_mcore2hf_tp1pp1ep8": [
+        {
+            "param": {
+                "load-model-type":"mg",
+                "save-model-type": "hf",
+                "target-tensor-parallel-size": "1",
+                "target-pipeline-parallel-size": "1",
+                "target-expert-parallel-size": "1",
+                "save-dir":"/data/ci/cache/deepseek2_lite_mg-hf",
+                "load-dir":"/data/ci/models/deepseek2-lite/mg/deepseek2_lite_mg_v2/",
+                "model-type-hf": "deepseek2-lite",
+                "_reference_dir": "/data/ci/models/deepseek2-lite/hf/deepseek2_lite_hf"
+            }
+        }
+    ],
+
+    "test_llama2_lora2hf_tp1pp1":[
+        {
+            "param":{
+                "load-model-type":"mg",
+                "save-model-type":"hf",
+                "load-dir":"/data/ci/models/llama2/mg/llama-7b-lora-mcore-tp1pp1/",
+                "save-dir":"/data/ci/cache/llama2-7b-lora2mcore-test-hf/",
+                "lora-r":"16",
+                "lora-alpha":"32",
+                "lora-target-modules":"linear_qkv",
+                "target-tensor-parallel-size": "1",
+                "target-pipeline-parallel-size": "1",
+                "model-type-hf": "llama2"
+            }
+        },
+        {
+            "Base_MD5" : [
+                "702a4830d841a54cc5ff558c1afc4a7f",
+                "6ae46e5a4f28fc28c4b1cb03e4fd0e59",
+                "4902cf6a2a5d1c6096fd2cceacd07195",
+                "31aef6fb8ad54fe99d6ec8b846be1391",
+                "53cbfd63fd5f37111876aafbd6bcbd2c",
+                "6080171cd016b6541ebeea95c57f583c",
+                "00b4303c7729f6fb78dd239b765a275c",
+                "0c2510a9718f5ae799aa03e8087c11c0",
+                "8030de588cc22b982bd03946a49d4626",
+                "651ec5b99f81532054e3d767d65eccfb",
+                "76aad5a7b91f13dfddfb584e0f955290",
+                "b6289b3e3a8b53da2594522be1282f6b",
+                "59f3b14a0eaa750fd11f6912ad1ffcd1",
+                "149946684206ab1e907b81fa5ee36194",
+                "710bc35c1c6b5335d5470f9cb09baf9e",
+                "e358ca311be654b1f9699f0f2fb7495f",
+                "b80137d53a93edc088f9ff2a48f86e19",
+                "1177978a894ff2b6668cc01b1cb97760",
+                "5447123539778daeab651b2ae37eea6b",
+                "5bf31041b09acd973a5ed15458c11791",
+                "ec660ff3a1e7fad360b34f98df58b9a0",
+                "35ccf9ecef8dde12c5918119fe179c48",
+                "cb2ebff0f98eb9adce9f08988b2afe9b",
+                "f7f8a5ef1e5562887ab3e9ca36bf5065",
+                "1e36c0165a4099d674131c027730a9a2",
+                "82c612f6b96a437384574877a7607fed",
+                "894f63ba4704179831ea6c9013fd38f8",
+                "a3a9b723fcebcb0725fc6e120e732c28",
+                "edb6e993df18448ba0e88953dfd9fff8",
+                "30fb09bd4a8df2828af7d04e3d4c31ae",
+                "f78d2f22feb1eb76406f03c740d6331d",
+                "4e68e8feb8e302edd1736a7ce61352f4"
+            ]
+        }
+    ],
+
+    "test_qwen2_moe_hf2mcore_tp1pp2ep2": [
+        {
+            "param": {
+                "load-model-type":"hf",
+                "save-model-type":"mg",
+                "target-tensor-parallel-size": "1",
+                "target-pipeline-parallel-size": "2",
+                "target-expert-parallel-size": "2",
+                "load-dir":"/data/ci/models/qwen2-moe/hf/qwen2_moe_hf",
+                "save-dir":"/data/ci/cache/qwen2_moe_l2_t1p2e2",
+                "moe-grouped-gemm": null,
+                "model-type-hf": "qwen2-moe"
+            }
+        }
+    ],
+
+    "test_qwen2_moe_mcore2hf_tp1pp2ep2": [
+        {
+            "param": {
+                "load-model-type":"mg",
+                "save-model-type": "hf",
+                "target-tensor-parallel-size": "1",
+                "target-pipeline-parallel-size": "1",
+                "target-expert-parallel-size": "1",
+                "save-dir":"/data/ci/cache/qwen2_moe_l2_t1p2e2-hf",
+                "load-dir":"/data/ci/cache/qwen2_moe_l2_t1p2e2",
+                "moe-grouped-gemm": null,
+                "model-type-hf": "qwen2-moe",
+                "_reference_dir": "/data/ci/models/qwen2-moe/hf/qwen2_moe_hf"
+            }
+        }
+    ]
+}
