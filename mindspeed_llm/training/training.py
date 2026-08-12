@@ -70,7 +70,7 @@ from mindspeed_llm.training.initialize import set_jit_fusion_options
 from mindspeed_llm.tasks.posttrain.lora.utils import is_enable_lora
 from mindspeed_llm.training.utils import get_actual_attn_ratio, clear_actual_attn_ratio, is_distributed_ckpt_complete
 from mindspeed_llm.training.checkpointing import _convert_weights_mg2hf
-
+from mindspeed_llm.training.performance_monitor import calculate_mfu, get_ai_core_utilization
 
 # The earliest we can measure the start time.
 _TRAIN_START_TIME = time.time()
@@ -1131,6 +1131,8 @@ def training_log(loss_dict, total_loss_dict, learning_rate, decoupled_learning_r
         attn_ratio = get_average_attn_ratio(args) * 100
         throughput = num_floating_point_operations(args, batch_size) / (
             elapsed_time_per_iteration * 10**12 * args.world_size)
+        mfu = calculate_mfu(throughput, args.theoretical_device_tflops) if args.log_mfu else None
+        ai_core_utilization = get_ai_core_utilization() if args.log_ai_core_utilization else None
         clear_actual_attn_ratio()
 
         one_logger_utils.track_e2e_metrics(args.log_throughput, throughput)
@@ -1153,15 +1155,32 @@ def training_log(loss_dict, total_loss_dict, learning_rate, decoupled_learning_r
         log_string += ' elapsed time per iteration (ms): {:.1f} |'.format(
             elapsed_time_per_iteration * 1000.0)
         if args.log_throughput:
-            log_string += f' throughput per GPU (TFLOP/s/GPU): {throughput:.1f} |'
+            log_string += f' throughput per Die (TFLOP/s/Die): {throughput:.1f} |'
             log_string += f' core attn ratio (%): {attn_ratio:.1f} |'
-            if args.log_timers_to_tensorboard:
-                if writer:
-                    writer.add_scalar('throughput', throughput, iteration)
-                if wandb_writer:
-                    wandb_writer.log({'throughput': throughput}, iteration)
+            # if args.log_timers_to_tensorboard:
+            #     if writer:
+            #         writer.add_scalar('throughput', throughput, iteration)
+            #     if wandb_writer:
+            #         wandb_writer.log({'throughput': throughput}, iteration)
         # Decoupled_learning_rate should be not None only on first and last pipeline stage.
+        if mfu is not None:
+            log_string += f' MFU (%): {mfu:.2f} |'
+        if ai_core_utilization is not None:
+            log_string += f' AI Core utilization (%): {ai_core_utilization:.2f} |'
         log_string += f' learning rate: {learning_rate:.6E} |'
+        if iteration % args.tensorboard_log_interval == 0:
+            performance_metrics = {}
+            if args.log_throughput:
+                performance_metrics['performance/throughput-tflops-per-device'] = throughput
+            if mfu is not None:
+                performance_metrics['performance/mfu'] = mfu
+            if ai_core_utilization is not None:
+                performance_metrics['performance/ai-core-utilization'] = ai_core_utilization
+            if writer:
+                for metric_name, metric_value in performance_metrics.items():
+                    writer.add_scalar(metric_name, metric_value, iteration)
+            if wandb_writer and performance_metrics:
+                wandb_writer.log(performance_metrics, iteration)
         if args.decoupled_lr is not None and (mpu.is_pipeline_first_stage(ignore_virtual=True) or
                                               mpu.is_pipeline_last_stage(ignore_virtual=True)):
             if decoupled_learning_rate is None:

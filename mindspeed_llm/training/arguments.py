@@ -88,6 +88,13 @@ def process_args_v2(parser):
         argparse.ArgumentParser: Parser with MindSpeed-LLM arguments added.
     """
     MindSpeedFeaturesManager.register_features_args(parser)
+    group = parser.add_argument_group(title='performance monitoring')
+    group.add_argument('--log-mfu', action='store_true',
+                       help='Log per-device model FLOPs utilization (MFU) at each logging step.')
+    group.add_argument('--theoretical-device-tflops', type=float, default=None,
+                       help='Theoretical BF16/FP16 peak TFLOP/s of one device, required by --log-mfu.')
+    group.add_argument('--log-ai-core-utilization', action='store_true',
+                       help='Log mean hardware AI Core utilization across all training ranks.')
     return parser
 
 
@@ -208,6 +215,12 @@ def validate_args_v2_decorator(megatron_validate_args):
 
         # make megatron args validation then restore args thar are copied.
         args = megatron_validate_args(args, defaults)
+
+        if args.log_mfu and (args.theoretical_device_tflops is None
+                             or args.theoretical_device_tflops <= 0):
+            raise ValueError(
+                "--theoretical-device-tflops must be greater than 0 when --log-mfu is enabled."
+            )
 
         # make post validation after megatron validation.
         MindSpeedFeaturesManager.post_validate_features_args(args=args)
