@@ -927,6 +927,38 @@ def num_floating_point_operations_wrapper(fn):
     return wrapper
 
 
+def _wandb_scalar(value):
+    """Convert a scalar tensor to a plain value before sending it to W&B."""
+    if torch.is_tensor(value) and value.numel() == 1:
+        return value.detach().item()
+    return value
+
+
+class _TrainingLogScalarWriter:
+    """Mirror timer scalars to TensorBoard and the current W&B payload."""
+
+    def __init__(self, tensorboard_writer, wandb_metrics):
+        self.tensorboard_writer = tensorboard_writer
+        self.wandb_metrics = wandb_metrics
+
+    def add_scalar(self, name, value, iteration):
+        if self.tensorboard_writer is not None:
+            self.tensorboard_writer.add_scalar(name, value, iteration)
+        if self.wandb_metrics is not None:
+            self.wandb_metrics[name] = _wandb_scalar(value)
+
+
+class _TrainingLogWandbWriter:
+    """Collect helper metrics so W&B receives one committed log per step."""
+
+    def __init__(self, wandb_metrics):
+        self.wandb_metrics = wandb_metrics
+
+    def log(self, metrics, *args, **kwargs):
+        for name, value in metrics.items():
+            self.wandb_metrics[name] = _wandb_scalar(value)
+
+
 def training_log(loss_dict, total_loss_dict, learning_rate, decoupled_learning_rate, iteration,
                  loss_scale, report_memory_flag, skipped_iter,
                  grad_norm, params_norm, num_zeros_in_grad):
@@ -936,6 +968,14 @@ def training_log(loss_dict, total_loss_dict, learning_rate, decoupled_learning_r
     writer = get_tensorboard_writer()
     wandb_writer = get_wandb_writer()
     one_logger = get_one_logger()
+    wandb_metrics = {} if wandb_writer is not None else None
+    helper_wandb_writer = (
+        _TrainingLogWandbWriter(wandb_metrics) if wandb_metrics is not None else None
+    )
+
+    def add_wandb_metric(name, value):
+        if wandb_metrics is not None and value is not None:
+            wandb_metrics[name] = _wandb_scalar(value)
 
     # Advanced, skipped, and Nan iterations.
     advanced_iters_key = 'advanced iterations'
@@ -1009,86 +1049,85 @@ def training_log(loss_dict, total_loss_dict, learning_rate, decoupled_learning_r
     # Timer requires all the ranks to call.
     if args.log_timers_to_tensorboard and \
        (iteration % args.tensorboard_log_interval == 0):
-        timers.write(timers_to_log, writer, iteration,
+        timer_writer = _TrainingLogScalarWriter(writer, wandb_metrics)
+        timers.write(timers_to_log, timer_writer, iteration,
                      normalizer=total_iterations)
-    if writer and (iteration % args.tensorboard_log_interval == 0):
-        if wandb_writer:
-            wandb_writer.log({'samples vs steps': args.consumed_train_samples},
-                             iteration)
-        writer.add_scalar('learning-rate', learning_rate, iteration)
-        writer.add_scalar('learning-rate vs samples', learning_rate,
-                            args.consumed_train_samples)
-        if wandb_writer:
-            wandb_writer.log({'learning-rate': learning_rate}, iteration)
+    if iteration % args.tensorboard_log_interval == 0:
+        add_wandb_metric('samples vs steps', args.consumed_train_samples)
+        add_wandb_metric('learning-rate', learning_rate)
+        # add_wandb_metric('learning-rate vs samples', learning_rate)
+        if writer:
+            writer.add_scalar('learning-rate', learning_rate, iteration)
+            # writer.add_scalar('learning-rate vs samples', learning_rate,
+            #                   args.consumed_train_samples)
         if args.decoupled_lr is not None:
-            writer.add_scalar('decoupled-learning-rate', decoupled_learning_rate, iteration)
+            add_wandb_metric('decoupled-learning-rate', decoupled_learning_rate)
+            if writer:
+                writer.add_scalar('decoupled-learning-rate', decoupled_learning_rate, iteration)
         if args.skipped_train_samples > 0:
-            writer.add_scalar('skipped-train-samples', args.skipped_train_samples, iteration)
-            if wandb_writer:
-                wandb_writer.log({'skipped-train-samples': args.skipped_train_samples}, iteration)
-        writer.add_scalar('batch-size', batch_size, iteration)
-        writer.add_scalar('batch-size vs samples', batch_size,
-                          args.consumed_train_samples)
-        if wandb_writer:
-            wandb_writer.log({'batch-size': batch_size}, iteration)
+            add_wandb_metric('skipped-train-samples', args.skipped_train_samples)
+            if writer:
+                writer.add_scalar('skipped-train-samples', args.skipped_train_samples, iteration)
+        add_wandb_metric('batch-size', batch_size)
+        # add_wandb_metric('batch-size vs samples', batch_size)
+        if writer:
+            writer.add_scalar('batch-size', batch_size, iteration)
+            # writer.add_scalar('batch-size vs samples', batch_size,
+            #                   args.consumed_train_samples)
         for key in loss_dict:
-            writer.add_scalar(key , loss_dict[key], iteration)
-            writer.add_scalar(key + ' vs samples', loss_dict[key],
-                              args.consumed_train_samples)
-            if wandb_writer:
-                wandb_writer.log({key: loss_dict[key]}, iteration)
+            add_wandb_metric(key, loss_dict[key])
+            # add_wandb_metric(key + ' vs samples', loss_dict[key])
+            if writer:
+                writer.add_scalar(key, loss_dict[key], iteration)
+                # writer.add_scalar(key + ' vs samples', loss_dict[key],
+                #                   args.consumed_train_samples)
         if args.log_loss_scale_to_tensorboard:
-            writer.add_scalar('loss-scale', loss_scale, iteration)
-            writer.add_scalar('loss-scale vs samples', loss_scale,
-                              args.consumed_train_samples)
-            if wandb_writer:
-                wandb_writer.log({'loss-scale': loss_scale}, iteration)
+            add_wandb_metric('loss-scale', loss_scale)
+            # add_wandb_metric('loss-scale vs samples', loss_scale)
+            if writer:
+                writer.add_scalar('loss-scale', loss_scale, iteration)
+                # writer.add_scalar('loss-scale vs samples', loss_scale,
+                #                   args.consumed_train_samples)
         if args.log_world_size_to_tensorboard:
-            writer.add_scalar('world-size', args.world_size, iteration)
-            writer.add_scalar('world-size vs samples', args.world_size,
-                              args.consumed_train_samples)
-            if wandb_writer:
-                wandb_writer.log({'world-size': args.world_size}, iteration)
+            add_wandb_metric('world-size', args.world_size)
+            # add_wandb_metric('world-size vs samples', args.world_size)
+            if writer:
+                writer.add_scalar('world-size', args.world_size, iteration)
+                # writer.add_scalar('world-size vs samples', args.world_size,
+                #                   args.consumed_train_samples)
         if grad_norm is not None:
-            writer.add_scalar('grad-norm', grad_norm, iteration)
-            writer.add_scalar('grad-norm vs samples', grad_norm,
-                              args.consumed_train_samples)
-            if wandb_writer:
-                wandb_writer.log({'grad-norm': grad_norm}, iteration)
+            add_wandb_metric('grad-norm', grad_norm)
+            # add_wandb_metric('grad-norm vs samples', grad_norm)
+            if writer:
+                writer.add_scalar('grad-norm', grad_norm, iteration)
+                # writer.add_scalar('grad-norm vs samples', grad_norm,
+                #                   args.consumed_train_samples)
         if num_zeros_in_grad is not None:
-            writer.add_scalar('num-zeros', num_zeros_in_grad, iteration)
-            writer.add_scalar('num-zeros vs samples', num_zeros_in_grad,
-                              args.consumed_train_samples)
-            if wandb_writer:
-                wandb_writer.log({'num-zeros': num_zeros_in_grad}, iteration)
+            add_wandb_metric('num-zeros', num_zeros_in_grad)
+            # add_wandb_metric('num-zeros vs samples', num_zeros_in_grad)
+            if writer:
+                writer.add_scalar('num-zeros', num_zeros_in_grad, iteration)
+                # writer.add_scalar('num-zeros vs samples', num_zeros_in_grad,
+                #                   args.consumed_train_samples)
         if params_norm is not None:
-            writer.add_scalar('params-norm', params_norm, iteration)
-            writer.add_scalar('params-norm vs samples', params_norm,
-                              args.consumed_train_samples)
-            if wandb_writer:
-                wandb_writer.log({'params-norm': params_norm}, iteration)
+            add_wandb_metric('params-norm', params_norm)
+            # add_wandb_metric('params-norm vs samples', params_norm)
+            if writer:
+                writer.add_scalar('params-norm', params_norm, iteration)
+                # writer.add_scalar('params-norm vs samples', params_norm,
+                #                   args.consumed_train_samples)
         if args.log_memory_to_tensorboard:
             mem_stats = torch.cuda.memory_stats()
-            writer.add_scalar(
-                "mem-reserved-bytes",
-                mem_stats["reserved_bytes.all.current"],
-                iteration,
-            )
-            writer.add_scalar(
-                "mem-allocated-bytes",
-                mem_stats["allocated_bytes.all.current"],
-                iteration,
-            )
-            writer.add_scalar(
-                "mem-max-allocated-bytes",
-                mem_stats["allocated_bytes.all.peak"],
-                iteration,
-            )
-            writer.add_scalar(
-                "mem-allocated-count",
-                mem_stats["allocation.all.current"],
-                iteration,
-            )
+            memory_metrics = {
+                'mem-reserved-bytes': mem_stats['reserved_bytes.all.current'],
+                'mem-allocated-bytes': mem_stats['allocated_bytes.all.current'],
+                'mem-max-allocated-bytes': mem_stats['allocated_bytes.all.peak'],
+                'mem-allocated-count': mem_stats['allocation.all.current'],
+            }
+            for metric_name, metric_value in memory_metrics.items():
+                add_wandb_metric(metric_name, metric_value)
+                if writer:
+                    writer.add_scalar(metric_name, metric_value, iteration)
     if args.num_experts is not None:
         moe_loss_scale = 1 / get_num_microbatches()
         track_names = []
@@ -1100,7 +1139,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, decoupled_learning_r
             loss_scale=moe_loss_scale,
             iteration=iteration,
             writer=writer,
-            wandb_writer=wandb_writer,
+            wandb_writer=helper_wandb_writer,
             total_loss_dict=total_loss_dict,
             per_layer_logging=args.moe_per_layer_logging,
             force_initialize=True,
@@ -1111,12 +1150,12 @@ def training_log(loss_dict, total_loss_dict, learning_rate, decoupled_learning_r
     if args.mtp_num_layers is not None:
         mtp_loss_scale = 1 / get_num_microbatches()
         MTPLossLoggingHelper.track_mtp_metrics(
-            mtp_loss_scale, iteration, writer, wandb_writer, total_loss_dict
+            mtp_loss_scale, iteration, writer, helper_wandb_writer, total_loss_dict
             )
     if args.enable_dsa_indexer:
         dsa_indexer_loss_scale = 1 / get_num_microbatches()
         DSAIndexerLossLoggingHelper.track_das_indexer_metrics(
-            dsa_indexer_loss_scale, iteration, writer, wandb_writer, total_loss_dict
+            dsa_indexer_loss_scale, iteration, writer, helper_wandb_writer, total_loss_dict
             )
     if iteration % args.log_interval == 0:
         if args.record_memory_history and is_last_rank():
@@ -1141,9 +1180,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, decoupled_learning_r
             if writer:
                 writer.add_scalar('iteration-time',
                                   elapsed_time_per_iteration, iteration)
-            if wandb_writer:
-                wandb_writer.log({'iteration-time': elapsed_time_per_iteration},
-                                 iteration)
+            add_wandb_metric('iteration-time', elapsed_time_per_iteration)
         log_string = f" [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]"
         log_string += ' iteration {:8d}/{:8d} |'.format(
             iteration, args.train_iters)
@@ -1157,11 +1194,6 @@ def training_log(loss_dict, total_loss_dict, learning_rate, decoupled_learning_r
         if args.log_throughput:
             log_string += f' throughput per Die (TFLOP/s/Die): {throughput:.1f} |'
             log_string += f' core attn ratio (%): {attn_ratio:.1f} |'
-            # if args.log_timers_to_tensorboard:
-            #     if writer:
-            #         writer.add_scalar('throughput', throughput, iteration)
-            #     if wandb_writer:
-            #         wandb_writer.log({'throughput': throughput}, iteration)
         # Decoupled_learning_rate should be not None only on first and last pipeline stage.
         if mfu is not None:
             log_string += f' MFU (%): {mfu:.2f} |'
@@ -1179,8 +1211,8 @@ def training_log(loss_dict, total_loss_dict, learning_rate, decoupled_learning_r
             if writer:
                 for metric_name, metric_value in performance_metrics.items():
                     writer.add_scalar(metric_name, metric_value, iteration)
-            if wandb_writer and performance_metrics:
-                wandb_writer.log(performance_metrics, iteration)
+            for metric_name, metric_value in performance_metrics.items():
+                add_wandb_metric(metric_name, metric_value)
         if args.decoupled_lr is not None and (mpu.is_pipeline_first_stage(ignore_virtual=True) or
                                               mpu.is_pipeline_last_stage(ignore_virtual=True)):
             if decoupled_learning_rate is None:
@@ -1190,25 +1222,50 @@ def training_log(loss_dict, total_loss_dict, learning_rate, decoupled_learning_r
             if decoupled_learning_rate is not None:
                 raise ValueError("decoupled_learning_rate should not be configured")
         log_string += f' global batch size: {batch_size:5d} |'
+        add_wandb_metric('training/iteration', iteration)
+        add_wandb_metric('training/train-iters', args.train_iters)
+        add_wandb_metric('training/consumed-samples', args.consumed_train_samples)
+        add_wandb_metric('training/skipped-train-samples', args.skipped_train_samples)
+        add_wandb_metric('training/elapsed-time-per-iteration-ms', elapsed_time_per_iteration * 1000.0)
+        add_wandb_metric('training/learning-rate', learning_rate)
+        add_wandb_metric('training/global-batch-size', batch_size)
+        add_wandb_metric('training/loss-scale', loss_scale)
+        add_wandb_metric('training/world-size', args.world_size)
+        if args.log_throughput:
+            add_wandb_metric('training/throughput-tflops-per-device', throughput)
+            add_wandb_metric('training/core-attention-ratio-percent', attn_ratio)
+        if mfu is not None:
+            add_wandb_metric('training/mfu-percent', mfu)
+        if ai_core_utilization is not None:
+            add_wandb_metric('training/ai-core-utilization-percent', ai_core_utilization)
+        if decoupled_learning_rate is not None:
+            add_wandb_metric('training/decoupled-learning-rate', decoupled_learning_rate)
         for key in total_loss_dict:
             if key not in [advanced_iters_key, skipped_iters_key,
                            nan_iters_key]:
                 avg = total_loss_dict[key].item() / \
                       float(max(1, total_loss_dict[advanced_iters_key]))
+                add_wandb_metric(f'training/{key}', avg)
                 if avg > 0.0:
                     log_string += ' {}: {:.6E} |'.format(key, avg)
                 total_loss_dict[key] = torch.tensor([0.0], dtype=torch.float, device='cuda')
         log_string += f' loss scale: {loss_scale:.1f} |'
         if grad_norm is not None:
             log_string += f' grad norm: {grad_norm:.3f} |'
+            add_wandb_metric('training/grad-norm', grad_norm)
         if num_zeros_in_grad is not None:
             log_string += f' num zeros: {num_zeros_in_grad} |'
+            add_wandb_metric('training/num-zeros', num_zeros_in_grad)
         if params_norm is not None:
             log_string += f' params norm: {params_norm:.3f} |'
+            add_wandb_metric('training/params-norm', params_norm)
         log_string += ' number of skipped iterations: {:3d} |'.format(
             total_loss_dict[skipped_iters_key])
         log_string += ' number of nan iterations: {:3d} |'.format(
             total_loss_dict[nan_iters_key])
+        add_wandb_metric('training/advanced-iterations', total_loss_dict[advanced_iters_key])
+        add_wandb_metric('training/skipped-iterations', total_loss_dict[skipped_iters_key])
+        add_wandb_metric('training/nan-iterations', total_loss_dict[nan_iters_key])
         if args.fix_sub_seq_length > 0 or args.fix_router:
             log_string += ' fix-router or fix-sub-seq-length is set, current loss is not reliable, only for test |'
         total_loss_dict[advanced_iters_key] = 0
@@ -1223,6 +1280,9 @@ def training_log(loss_dict, total_loss_dict, learning_rate, decoupled_learning_r
             report_memory(f'(after {iteration} iterations)')
             report_memory_flag = False
         timers.log(timers_to_log, normalizer=args.log_interval)
+
+    if wandb_writer is not None and wandb_metrics:
+        wandb_writer.log(wandb_metrics, step=iteration)
 
     return report_memory_flag
 

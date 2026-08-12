@@ -95,6 +95,8 @@ def process_args_v2(parser):
                        help='Theoretical BF16/FP16 peak TFLOP/s of one device, required by --log-mfu.')
     group.add_argument('--log-ai-core-utilization', action='store_true',
                        help='Log mean hardware AI Core utilization across all training ranks.')
+    group.add_argument('--ai-core-utilization-sampling-interval', type=float, default=0.2,
+                       help='Seconds between AI Core utilization samples during each training iteration.')
     return parser
 
 
@@ -220,6 +222,12 @@ def validate_args_v2_decorator(megatron_validate_args):
                              or args.theoretical_device_tflops <= 0):
             raise ValueError(
                 "--theoretical-device-tflops must be greater than 0 when --log-mfu is enabled."
+            )
+        if (args.log_ai_core_utilization
+                and args.ai_core_utilization_sampling_interval <= 0):
+            raise ValueError(
+                "--ai-core-utilization-sampling-interval must be greater than 0 when "
+                "--log-ai-core-utilization is enabled."
             )
 
         # make post validation after megatron validation.

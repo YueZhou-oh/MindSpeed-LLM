@@ -36,14 +36,15 @@ MBS=4
 GBS=64
 SEQ_LENGTH=4096
 TRAIN_ITERS=2000
-EVAL_ITERS=200
-SAVE_ITERS=2000
+EVAL_ITERS=20
+SAVE_ITERS=100
 
 
 LOG_FILE="./logs/pretrain_scillm_8b_nn${NNODES}rank${NODE_RANK}tp${TP}pp${PP}cp${CP}mbs${MBS}gbs${GBS}.log"
 MONITOR_BACKEND=${MONITOR_BACKEND:-wandb}  # tensorboard, wandb, both, or none
 MONITOR_DIR=${MONITOR_DIR:-./monitoring/scillm_8b_nn${NNODES}tp${TP}pp${PP}cp${CP}mbs${MBS}gbs${GBS}}
 NPU_PEAK_TFLOPS=${NPU_PEAK_TFLOPS:-402.5}  # Override this with the BF16 peak of the actual NPU.
+AI_CORE_SAMPLE_INTERVAL=${AI_CORE_SAMPLE_INTERVAL:-0.1}
 WANDB_PROJECT=${WANDB_PROJECT:-mindspeed-llm}
 WANDB_EXP_NAME=${WANDB_EXP_NAME:-scillm-8b-4k-nn${NNODES}-tp${TP}-pp${PP}-cp${CP}}
 
@@ -51,8 +52,13 @@ MONITOR_ARGS="
     --log-throughput \
     --log-mfu \
     --theoretical-device-tflops ${NPU_PEAK_TFLOPS} \
-    --log-ai-core-utilization
+    --log-params-norm \
+    --log-num-zeros-in-grad \
+    --log-ai-core-utilization \
+    --ai-core-utilization-sampling-interval ${AI_CORE_SAMPLE_INTERVAL}
 "
+
+
 
 case "${MONITOR_BACKEND}" in
     tensorboard)
