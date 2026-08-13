@@ -1,7 +1,11 @@
 #!/bin/bash
 # set -o pipefail
 
-# cd /dpc-zhouy/zhouy/MindSpeed-LLM/
+# Number of training nodes. NODE_RANK=0 is the master node.
+NNODES=${NNODES:-10}
+NODE_RANK=${NODE_RANK:-0}
+
+cd /dpc-zhouy/zhouy/MindSpeed-LLM/
 source /dpc-zhouy/zhouy/miniconda3/bin/activate
 conda activate py311
 source /dpc-zhouy/usr/local/Ascend/ascend-toolkit/set_env.sh
@@ -17,30 +21,28 @@ export TASK_QUEUE_ENABLE=2
 export GLOO_SOCKET_IFNAME=enp66s0f5
 
 NPUS_PER_NODE=8
-MASTER_ADDR=10.16.201.31
+MASTER_ADDR=10.16.201.163
 MASTER_PORT=6002
-NNODES=1
-NODE_RANK=0
 WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
 # please fill these path configurations
 CKPT_SAVE_DIR="/dpc-zhouy/zhouy/ckpts/SciLLM-8B"
-DATA_PATH="/dpc-zhouy/zhouy/data/alpaca/data/train-00000-of-00001-a09b74b3ef9c3b56.parquet"
-TOKENIZER_PATH="/dpc-zhouy/zhouy/ckpts/Qwen3-8B"
+DATA_PATH="/dpc-zhouy/zhouy/forge/baseline/all_text_document"
+TOKENIZER_PATH="/dpc-zhouy/zhouy/forge/baseline/forge_tokenizer"
 # CKPT_LOAD_DIR="/dpc-zhouy/zhouy/ckpts/Qwen3-8B"
 
 TP=8
 PP=1
 CP=1
 MBS=4
-GBS=64
+GBS=640
 SEQ_LENGTH=4096
-TRAIN_ITERS=2000
-EVAL_ITERS=20
-SAVE_ITERS=100
+TRAIN_ITERS=100000
+EVAL_ITERS=50
+SAVE_ITERS=10000
 
-
-LOG_FILE="./logs/pretrain_scillm_8b_nn${NNODES}rank${NODE_RANK}tp${TP}pp${PP}cp${CP}mbs${MBS}gbs${GBS}.log"
+TIMESTAMP=$(date '+%Y-%m-%d-%H-%M-%S')
+LOG_FILE="./logs_run/${TIMESTAMP}/scratch_scillm_8b_nn${NNODES}rank${NODE_RANK}tp${TP}pp${PP}cp${CP}mbs${MBS}gbs${GBS}_${TIMESTAMP}.log"
 MONITOR_BACKEND=${MONITOR_BACKEND:-wandb}  # tensorboard, wandb, both, or none
 MONITOR_DIR=${MONITOR_DIR:-./monitoring/scillm_8b_nn${NNODES}tp${TP}pp${PP}cp${CP}mbs${MBS}gbs${GBS}}
 NPU_PEAK_TFLOPS=${NPU_PEAK_TFLOPS:-402.5}  # Override this with the BF16 peak of the actual NPU.
@@ -52,12 +54,12 @@ MONITOR_ARGS="
     --log-throughput \
     --log-mfu \
     --theoretical-device-tflops ${NPU_PEAK_TFLOPS} \
-    --log-params-norm \
-    --log-num-zeros-in-grad \
-    --log-ai-core-utilization \
-    --ai-core-utilization-sampling-interval ${AI_CORE_SAMPLE_INTERVAL}
 "
 
+# --log-ai-core-utilization \
+# --ai-core-utilization-sampling-interval ${AI_CORE_SAMPLE_INTERVAL}
+# --log-params-norm \
+# --log-num-zeros-in-grad \
 
 
 case "${MONITOR_BACKEND}" in
@@ -105,9 +107,9 @@ OPTIMIZE_ARGS="
 TRAIN_ARGS="
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
-    --lr 1.25e-6 \
+    --lr 2e-4 \
     --lr-decay-style cosine \
-    --min-lr 1.25e-7 \
+    --min-lr 2e-5 \
     --weight-decay 1e-1 \
     --lr-warmup-fraction 0.01 \
     --attention-dropout 0.0 \
@@ -140,7 +142,7 @@ GPT_ARGS="
     --num-attention-heads 32 \
     --tokenizer-type PretrainedFromHF \
     --make-vocab-size-divisible-by 1 \
-    --padded-vocab-size 151936 \
+    --padded-vocab-size 52000 \
     --rotary-base 1000000 \
     --untie-embeddings-and-output-weights \
     --disable-bias-linear \
@@ -184,7 +186,7 @@ torchrun $DISTRIBUTED_ARGS pretrain_gpt.py \
     --save ${CKPT_SAVE_DIR} \
     --distributed-backend nccl \
     --transformer-impl local \
-    | tee ${LOG_FILE}
+    > ${LOG_FILE} 2>&1 < /dev/null &
 
 # --load ${CKPT_LOAD_DIR} \
 # --enable-hf2mg-convert \

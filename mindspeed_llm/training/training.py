@@ -18,6 +18,7 @@ import os
 import gc
 import sys
 import json
+import math
 from datetime import datetime
 from functools import wraps
 import logging
@@ -49,7 +50,7 @@ from megatron.training.theoretical_memory_usage import report_theoretical_memory
 from megatron.training.training import disable_forward_pre_hook, enable_forward_pre_hook
 from megatron.training.training import (
     train_step, calc_params_l2_norm,
-    evaluate_and_print_results,
+    evaluate,
     save_checkpoint_and_time, print_datetime,
     get_one_logger,
     append_to_progress_log, build_train_valid_test_data_iterators
@@ -70,7 +71,12 @@ from mindspeed_llm.training.initialize import set_jit_fusion_options
 from mindspeed_llm.tasks.posttrain.lora.utils import is_enable_lora
 from mindspeed_llm.training.utils import get_actual_attn_ratio, clear_actual_attn_ratio, is_distributed_ckpt_complete
 from mindspeed_llm.training.checkpointing import _convert_weights_mg2hf
-from mindspeed_llm.training.performance_monitor import calculate_mfu, get_ai_core_utilization
+from mindspeed_llm.training.performance_monitor import (
+    AiCoreUtilizationSampler,
+    calculate_mfu,
+    get_ai_core_utilization,
+    reduce_ai_core_utilization,
+)
 
 # The earliest we can measure the start time.
 _TRAIN_START_TIME = time.time()
@@ -565,6 +571,11 @@ def pretrain(train_valid_test_dataset_provider,
                                    test_data_iterator, model,
                                    iteration, process_non_loss_data_func, config,
                                    verbose=True, write_to_tensorboard=not args.skip_train)
+
+    wandb_writer = get_wandb_writer()
+    if wandb_writer:
+        wandb_writer.finish()
+
     # this is to make sure all async saves are finished before the training ends
     maybe_finalize_async_save(blocking=True, terminate=True)
 
@@ -671,6 +682,12 @@ def train(forward_step_func, model, optimizer, opt_param_scheduler,
     if is_profile_enabled():
         prof = get_profiler()
         prof.start()
+
+    ai_core_sampler = None
+    if args.log_ai_core_utilization:
+        ai_core_sampler = AiCoreUtilizationSampler(
+            sampling_interval=args.ai_core_utilization_sampling_interval
+        )
     
     start_iteration = iteration
     # Disable forward pre-hook to start training to ensure that errors in checkpoint loading
@@ -706,6 +723,8 @@ def train(forward_step_func, model, optimizer, opt_param_scheduler,
         update_num_microbatches(args.consumed_train_samples, consistency_check=True)
 
         args.curr_iteration = iteration
+        if ai_core_sampler is not None:
+            ai_core_sampler.begin_interval()
         loss_dict, skipped_iter, should_checkpoint, should_exit, exit_code, grad_norm, num_zeros_in_grad = \
             train_step(forward_step_func,
                        train_data_iterator,
@@ -713,6 +732,9 @@ def train(forward_step_func, model, optimizer, opt_param_scheduler,
                        optimizer,
                        opt_param_scheduler,
                        config)
+        ai_core_utilization_stats = (
+            ai_core_sampler.end_interval() if ai_core_sampler is not None else None
+        )
         _enable_npu_datadump_step_end()
         
         # Enable forward pre-hooks after first set of forward and backward passes.
@@ -760,7 +782,8 @@ def train(forward_step_func, model, optimizer, opt_param_scheduler,
                                           decoupled_learning_rate,
                                           iteration, loss_scale,
                                           report_memory_flag, skipped_iter,
-                                          grad_norm, params_norm, num_zeros_in_grad)
+                                          grad_norm, params_norm, num_zeros_in_grad,
+                                          ai_core_utilization_stats)
 
         if args.enable_high_availability:
             args.num_floating_point_operations_so_far = num_floating_point_operations_so_far
@@ -883,19 +906,20 @@ def train(forward_step_func, model, optimizer, opt_param_scheduler,
     if is_profile_enabled():
         prof.stop()
 
+    if ai_core_sampler is not None:
+        ai_core_sampler.close()
+
     one_logger_utils.track_e2e_metrics()
 
     maybe_finalize_async_save(blocking=True, terminate=True)
     if args.save and args.async_save:
         update_save_checkpoint_chmod(config.save)
 
-    # Flush TensorBoard and WandB writers.
+    # Flush TensorBoard here. W&B remains open for the final validation/test
+    # performed by pretrain() after train() returns.
     writer = get_tensorboard_writer()
     if writer:
         writer.flush()
-    wandb_writer = get_wandb_writer()
-    if wandb_writer:
-        wandb_writer.finish()
 
     # Close out pre-hooks if using distributed optimizer and overlapped param gather.
     if pre_hook_enabled:
@@ -903,6 +927,9 @@ def train(forward_step_func, model, optimizer, opt_param_scheduler,
 
     # If any exit conditions (signal handler, duration, iterations) have been reached, exit.
     if exit:
+        wandb_writer = get_wandb_writer()
+        if wandb_writer:
+            wandb_writer.finish()
         sys.exit()
 
     return iteration, num_floating_point_operations_so_far
@@ -959,9 +986,77 @@ class _TrainingLogWandbWriter:
             self.wandb_metrics[name] = _wandb_scalar(value)
 
 
+def evaluate_and_print_results(prefix, forward_step_func,
+                               data_iterator, model,
+                               iteration, process_non_loss_data_func, config,
+                               verbose=False, write_to_tensorboard=True,
+                               non_loss_data_func=None):
+    """Evaluate and mirror every printed scalar to TensorBoard and W&B."""
+    args = get_args()
+    writer = get_tensorboard_writer() if write_to_tensorboard else None
+    wandb_writer = get_wandb_writer()
+
+    total_loss_dict, collected_non_loss_data, timelimit = evaluate(
+        forward_step_func, data_iterator, model,
+        process_non_loss_data_func, config, verbose, non_loss_data_func)
+    if timelimit:
+        return
+
+    prefix_lower = prefix.lower()
+    split = 'test' if 'test' in prefix_lower else 'validation'
+    string = f' {split} loss at {prefix} | '
+    wandb_metrics = {
+        f'evaluation/{split}/iteration': iteration,
+        f'evaluation/{split}/consumed-train-samples': args.consumed_train_samples,
+        f'evaluation/{split}/consumed-valid-samples': args.consumed_valid_samples,
+        f'evaluation/{split}/eval-iters': args.eval_iters,
+        f'evaluation/{split}/global-batch-size': args.global_batch_size,
+    }
+
+    for key, loss in total_loss_dict.items():
+        loss_value = _wandb_scalar(loss)
+        ppl = math.exp(min(20, loss_value))
+        string += f'{key} value: {loss_value:.6E} | '
+        string += f'{key} PPL: {ppl:.6E} | '
+
+        legacy_name = f'{key} {split}'
+        wandb_metrics[legacy_name] = loss_value
+        wandb_metrics[f'{legacy_name} ppl'] = ppl
+        wandb_metrics[f'evaluation/{split}/{key}'] = loss_value
+        wandb_metrics[f'evaluation/{split}/{key}-ppl'] = ppl
+
+        if writer:
+            writer.add_scalar(legacy_name, loss_value, iteration)
+            writer.add_scalar(
+                f'{legacy_name} vs samples', loss_value,
+                args.consumed_train_samples)
+            if args.log_validation_ppl_to_tensorboard:
+                writer.add_scalar(f'{legacy_name} ppl', ppl, iteration)
+                writer.add_scalar(
+                    f'{legacy_name} ppl vs samples', ppl,
+                    args.consumed_train_samples)
+
+    if wandb_writer is not None and is_last_rank():
+        # Periodic evaluation completes the uncommitted training row at the same
+        # iteration. Final validation/test runs after training use a new W&B row.
+        if ' on validation set' in prefix_lower or ' on test set' in prefix_lower:
+            wandb_writer.log(wandb_metrics)
+        else:
+            wandb_writer.log(wandb_metrics, step=iteration)
+
+    if process_non_loss_data_func is not None and writer and is_last_rank():
+        process_non_loss_data_func(collected_non_loss_data, iteration, writer)
+
+    length = len(string) + 1
+    print_rank_last('-' * length)
+    print_rank_last(string)
+    print_rank_last('-' * length)
+
+
 def training_log(loss_dict, total_loss_dict, learning_rate, decoupled_learning_rate, iteration,
                  loss_scale, report_memory_flag, skipped_iter,
-                 grad_norm, params_norm, num_zeros_in_grad):
+                 grad_norm, params_norm, num_zeros_in_grad,
+                 ai_core_utilization_stats=None):
     """Log training information such as losses, timing, ...."""
     args = get_args()
     timers = get_timers()
@@ -1171,7 +1266,14 @@ def training_log(loss_dict, total_loss_dict, learning_rate, decoupled_learning_r
         throughput = num_floating_point_operations(args, batch_size) / (
             elapsed_time_per_iteration * 10**12 * args.world_size)
         mfu = calculate_mfu(throughput, args.theoretical_device_tflops) if args.log_mfu else None
-        ai_core_utilization = get_ai_core_utilization() if args.log_ai_core_utilization else None
+        ai_core_utilization = None
+        if args.log_ai_core_utilization:
+            if ai_core_utilization_stats is not None:
+                ai_core_utilization = reduce_ai_core_utilization(
+                    *ai_core_utilization_stats)
+            else:
+                # Compatibility fallback for callers outside the standard train loop.
+                ai_core_utilization = get_ai_core_utilization()
         clear_actual_attn_ratio()
 
         one_logger_utils.track_e2e_metrics(args.log_throughput, throughput)
@@ -1282,7 +1384,14 @@ def training_log(loss_dict, total_loss_dict, learning_rate, decoupled_learning_r
         timers.log(timers_to_log, normalizer=args.log_interval)
 
     if wandb_writer is not None and wandb_metrics:
-        wandb_writer.log(wandb_metrics, step=iteration)
+        periodic_evaluation_follows = (
+            args.eval_interval
+            and iteration % args.eval_interval == 0
+            and args.do_valid
+        )
+        wandb_writer.log(
+            wandb_metrics, step=iteration,
+            commit=not periodic_evaluation_follows)
 
     return report_memory_flag
 
