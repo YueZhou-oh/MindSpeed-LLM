@@ -1,0 +1,105 @@
+---
+- name: Dispatch eight RedPajama-Data-V2 download partitions
+  hosts: redpajama_workers
+  gather_facts: false
+  strategy: free
+
+  vars:
+    # One shared-memory path visible from every worker. Override with:
+    #   -e shared_downloader=/shared/path/to/downloader.sh
+    shared_downloader: /dpc-zhouy/zhouy/redpajama-data-v2/download_redpajama_v2_en_head_middle_8way.sh
+
+    # Remote paths. Override with -e if your storage location is different.
+    remote_job_dir: /dpc-zhouy/zhouy/redpajama-data-v2
+    output_root: /dpc-zhouy/zhouy/redpajama-data-v2
+    parallel_downloads: 8
+
+    remote_log_dir: "{{ remote_job_dir }}/launcher_logs"
+    remote_pid_dir: "{{ remote_job_dir }}/pids"
+
+  pre_tasks:
+    - name: Validate worker_id from inventory
+      ansible.builtin.assert:
+        that:
+          - worker_id is defined
+          - (worker_id | int) >= 0
+          - (worker_id | int) <= 7
+        fail_msg: "Each host must have a unique worker_id from 0 through 7."
+
+  tasks:
+    - name: Create remote job, output, log, and PID directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ remote_job_dir }}"
+        - "{{ output_root }}"
+        - "{{ remote_log_dir }}"
+        - "{{ remote_pid_dir }}"
+
+    - name: Check that the shared downloader is visible on every worker
+      ansible.builtin.stat:
+        path: "{{ shared_downloader }}"
+      register: shared_downloader_stat
+
+    - name: Fail if the shared downloader cannot be read
+      ansible.builtin.assert:
+        that:
+          - shared_downloader_stat.stat.exists
+          - shared_downloader_stat.stat.isreg
+          - shared_downloader_stat.stat.readable
+        fail_msg: "Shared downloader is not readable: {{ shared_downloader }}"
+
+    - name: Start this host's snapshot partition in the background
+      ansible.builtin.shell:
+        executable: /bin/bash
+        cmd: |
+          set -uo pipefail
+
+          shared_downloader={{ shared_downloader | quote }}
+          output_root={{ output_root | quote }}
+          worker_id={{ worker_id | quote }}
+          parallel_downloads={{ parallel_downloads | quote }}
+          pid_file={{ (remote_pid_dir ~ '/worker_' ~ worker_id ~ '.pid') | quote }}
+          stdout_log={{ (remote_log_dir ~ '/worker_' ~ worker_id ~ '.log') | quote }}
+
+          existing_pid=""
+          if [[ -s "$pid_file" ]]; then
+              existing_pid="$(<"$pid_file")"
+          fi
+
+          if [[ "$existing_pid" =~ ^[0-9]+$ ]] && kill -0 "$existing_pid" 2>/dev/null; then
+              command_line="$(tr '\0' ' ' <"/proc/${existing_pid}/cmdline" 2>/dev/null || true)"
+              if [[ "$command_line" == *"$shared_downloader"* ]] &&
+                 [[ "$command_line" == *" $worker_id "* ]]; then
+                  printf 'already running: worker=%s pid=%s log=%s\n' \
+                      "$worker_id" "$existing_pid" "$stdout_log"
+                  exit 0
+              fi
+          fi
+
+          nohup bash "$shared_downloader" \
+              "$worker_id" \
+              "$output_root" \
+              "$parallel_downloads" \
+              >>"$stdout_log" 2>&1 </dev/null &
+
+          new_pid=$!
+          printf '%s\n' "$new_pid" >"$pid_file"
+          sleep 1
+
+          if kill -0 "$new_pid" 2>/dev/null; then
+              printf 'started: worker=%s pid=%s log=%s output=%s\n' \
+                  "$worker_id" "$new_pid" "$stdout_log" "$output_root"
+          else
+              printf 'worker %s exited immediately; inspect %s\n' \
+                  "$worker_id" "$stdout_log" >&2
+              exit 1
+          fi
+      register: launch_result
+      changed_when: "'started:' in launch_result.stdout"
+
+    - name: Show launch result
+      ansible.builtin.debug:
+        var: launch_result.stdout
