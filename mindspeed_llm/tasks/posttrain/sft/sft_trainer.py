@@ -12,7 +12,7 @@ from megatron.core.models.gpt.gpt_layer_specs import (
     get_gpt_mtp_block_spec,
 )
 from megatron.core.transformer.spec_utils import import_module
-from megatron.training import get_args, get_timers, print_rank_0
+from megatron.training import get_args, get_timers, print_rank_0,get_tokenizer,print_rank_0
 from megatron.training.arguments import core_transformer_config_from_args
 from megatron.training.utils import average_losses_across_data_parallel_group, get_batch_on_this_cp_rank
 from megatron.training.yaml_arguments import core_transformer_config_from_yaml
@@ -37,7 +37,69 @@ from mindspeed_llm.training.utils import (
 )
 
 IGNORE_INDEX = -100
+_PRINTED_TRAINING_SAMPLE = False
 
+_PRINTED_TRAINING_SAMPLE = False
+
+
+def _print_training_sample_once(tokens, labels, attention_mask_1d):
+    global _PRINTED_TRAINING_SAMPLE
+
+    if os.getenv("PRINT_TRAINING_SAMPLE", "0") != "1":
+        return
+
+    if _PRINTED_TRAINING_SAMPLE:
+        return
+
+    if torch.distributed.is_initialized() and torch.distributed.get_rank() != 0:
+        return
+
+    _PRINTED_TRAINING_SAMPLE = True
+
+    input_ids = tokens[0].detach().cpu()
+    label_ids = labels[0].detach().cpu()
+
+    # Remove padding. Nonzero packed-attention segment IDs are also retained.
+    if attention_mask_1d is not None:
+        valid_mask = attention_mask_1d[0].detach().cpu().ne(0)
+        input_ids = input_ids[valid_mask]
+        label_ids = label_ids[valid_mask]
+
+    supervised_ids = label_ids[label_ids.ne(IGNORE_INDEX)]
+
+    max_tokens = int(
+        os.getenv("PRINT_TRAINING_SAMPLE_MAX_TOKENS", "8192")
+    )
+
+    shown_input_ids = input_ids[:max_tokens]
+    shown_supervised_ids = supervised_ids[:max_tokens]
+
+    tokenizer_wrapper = get_tokenizer()
+    tokenizer = getattr(
+        tokenizer_wrapper, "tokenizer", tokenizer_wrapper
+    )
+
+    decoded_input = tokenizer.decode(
+        shown_input_ids.tolist(),
+        skip_special_tokens=False,
+    )
+    decoded_supervised = tokenizer.decode(
+        shown_supervised_ids.tolist(),
+        skip_special_tokens=False,
+    )
+
+    print_rank_0(
+        "\n"
+        "========== RANK 0: FIRST SFT TRAINING EXAMPLE ==========\n"
+        f"input tokens: {input_ids.numel()}\n"
+        f"supervised tokens: {supervised_ids.numel()}\n"
+        f"printed input tokens: {shown_input_ids.numel()}\n"
+        "\n[DECODED FULL INPUT]\n"
+        f"{decoded_input}\n"
+        "\n[DECODED TOKENS USED FOR LOSS]\n"
+        f"{decoded_supervised}\n"
+        "========================================================\n"
+    )
 
 class SFTTrainer(BaseTrainer):
     def __init__(self):
@@ -107,6 +169,11 @@ class SFTTrainer(BaseTrainer):
         attention_mask_1d = data_b.get('attention_mask').long()
         # ignored label -100
         loss_mask = torch.where(labels == IGNORE_INDEX, 0, 1)
+
+        _print_training_sample_once(tokens=tokens,
+                                    labels=labels,
+                                    attention_mask_1d=attention_mask_1d,
+                                )
 
         if get_args().spec is not None and args.spec[0] == "mindspeed_llm.tasks.models.spec.hunyuan_spec":
             input_ids = tokens
