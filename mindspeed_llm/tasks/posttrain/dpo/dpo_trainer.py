@@ -17,9 +17,11 @@ from mindspeed_llm.training.utils import get_tune_attention_mask, get_finetune_d
 from mindspeed_llm.training.utils import get_batch_on_this_cp_rank
 from mindspeed.core.context_parallel.get_batch_utils import set_actual_seq_len, get_ring_degree
 from mindspeed.core.context_parallel.utils import pad_data
+from mindspeed_llm.tasks.posttrain.sft.sft_trainer import _print_training_sample_once, _PRINTED_TRAINING_SAMPLE
 
 
 IGNORE_INDEX = -100
+
 class DPOTrainer(BaseTrainer):
     """
     A trainer class for Direct Preference Optimization (DPO).
@@ -133,6 +135,12 @@ class DPOTrainer(BaseTrainer):
             'position_ids': position_ids
         }
         batch = get_batch_on_this_cp_rank(batch)
+
+        _print_training_sample_once(tokens=tokens,
+                                    labels=labels,
+                                    attention_mask_1d=attention_mask_1d,
+                                )
+
         return batch.values()
 
     def loss_func(self, input_tensor: torch.Tensor, output_tensor: torch.Tensor):
@@ -161,10 +169,20 @@ class DPOTrainer(BaseTrainer):
                 raise ValueError(f'Rank {global_rank}: found NaN in local forward loss calculation. '
                                  f'Device: {torch.cuda.current_device()}, node: {os.uname()[1]}')
 
-        # Reduce loss for logging.
-        metrics['lm loss'] = average_losses_across_data_parallel_group([loss])
-        for key in metrics.keys():
-            metrics[key] = average_losses_across_data_parallel_group([metrics[key]])
+        # # Reduce loss for logging.
+        # metrics['lm loss'] = average_losses_across_data_parallel_group([loss])
+        # for key in metrics.keys():
+        #     metrics[key] = average_losses_across_data_parallel_group([metrics[key]])
+
+        # Fix: DPO evaluation bug. 
+        metrics["lm loss"] = loss.detach()
+
+        # average_losses_across_data_parallel_group returns shape [N].
+        # Select element zero so each evaluation metric is a scalar tensor.
+        for key, value in list(metrics.items()):
+            metrics[key] = average_losses_across_data_parallel_group(
+                [value]
+            )[0]
 
         # Return the average loss, which will be used to calculate the global loss in the forward_step function.
         cp = parallel_state.get_context_parallel_world_size()
