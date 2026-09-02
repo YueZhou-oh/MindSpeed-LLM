@@ -53,6 +53,22 @@ cur_file_dir = Path(__file__).absolute().parent
 TEMPLATES_DIR = os.path.join(cur_file_dir, "configs/finetune/templates.json")
 
 
+def keep_en_or_code_language(sample):
+    meta = sample.get("meta")
+
+    # Normally meta is already a dict for JSON/Parquet struct columns.
+    # Handle JSON-string metadata as well.
+    if isinstance(meta, str):
+        try:
+            meta = json.loads(meta)
+        except (json.JSONDecodeError, TypeError):
+            return False
+    # print(meta)
+    # if meta.get("language") is None:
+    #     return True
+
+    return isinstance(meta, dict) and (meta.get("language") == "en" or meta.get("source") == "github")
+
 class CustomLanguageVars(nltk.tokenize.punkt.PunktLanguageVars if nltk else object):
 
     _period_context_fmt = r"""
@@ -386,6 +402,28 @@ def main():
 
     logger.info("building dataset: %s", args.input)
     raw_data = build_dataset(args)
+
+    filter_kwargs = {}
+    if not args.streaming:
+        filter_kwargs["num_proc"] = args.workers
+
+    original_num = None if args.streaming else len(raw_data)
+
+    logger.info(f"data example:{raw_data[0]}")
+
+    if ('cc_' not in args.input) and ('bookcorpus' not in args.input):
+        raw_data = raw_data.filter(
+            keep_en_or_code_language,
+            **filter_kwargs,
+        )
+
+    if not args.streaming:
+        logger.info(
+            "Language filter meta.language == 'en' or coding language: kept %d/%d samples (%.2f%%)",
+            len(raw_data),
+            original_num,
+            100.0 * len(raw_data) / original_num if original_num else 0.0,
+        )
 
     if args.n_subs == 1:
         handler = get_dataset_handler(args, raw_data, tokenizer, splitter)
