@@ -135,7 +135,9 @@ class MmluEval_PPL(DatasetEval):
                         add_special_tokens=True,
                         max_length=32768,
                     )
-                    tokens = tokenizer.tokenizer.batch_encode_plus(instructions, **tokenize_kwargs)
+                    # tokens = tokenizer.tokenizer.batch_encode_plus(instructions, **tokenize_kwargs)
+                    # for newer tokenizer
+                    tokens = tokenizer.tokenizer(instructions, **tokenize_kwargs)
                     batch_size, seq_len = tokens['input_ids'].shape
                     device = torch.cuda.current_device()
                     tokens['input_ids'] = tokens['input_ids'].to(device, non_blocking=True)
