@@ -164,6 +164,10 @@ class LLMChat(Chat):
             return result, dist.get_rank()
         return get_result(result, self.tokenizer), dist.get_rank()
 
+    def loglikelihood(self, requests):
+        from mindspeed_llm.tasks.evaluation.eval_utils.continuation_scoring import loglikelihood
+        return loglikelihood(self, requests)
+
     def beam_search_chat(self, instruction, history):
         instruction_temp = None
         if self.args.prompt_type is None:
@@ -371,6 +375,71 @@ def bbh_eval(eval_args, agent):
     return answer, score_df
 
 
+def commonsense(eval_args, agent):
+    from pathlib import Path
+
+    from mindspeed_llm.tasks.evaluation.eval_impl.commonsense_eval import (
+        TASKS,
+        canonical_task,
+        CommonsenseEval,
+    )
+
+    tasks = list(eval_args.task)
+    paths = list(eval_args.task_data_path)
+
+    selected = [
+        canonical_task(task)
+        for task in tasks
+        if canonical_task(task) in TASKS
+    ]
+
+    if not selected:
+        return
+
+    if len(paths) == len(tasks):
+        # Match every task to its corresponding path first.
+        # BoolQ is then excluded from this evaluator.
+        task_paths = [
+            (canonical_task(task), path)
+            for task, path in zip(tasks, paths)
+            if canonical_task(task) in TASKS
+        ]
+
+    elif len(paths) == 1 and len(selected) == len(tasks):
+        # Root-directory mode is supported for commonsense-only runs.
+        if len(selected) == 1:
+            task_paths = [(selected[0], paths[0])]
+        else:
+            task_paths = [
+                (task, str(Path(paths[0]) / f"{task}.jsonl"))
+                for task in selected
+            ]
+
+    else:
+        raise ValueError(
+            f"Received {len(tasks)} tasks and {len(paths)} data paths. "
+            "Provide one path per task in the same order. "
+            f"Tasks: {tasks!r}; paths: {paths!r}"
+        )
+
+    for task, path in task_paths:
+        if dist.get_rank() == 0:
+            logger.info("Evaluating task=%s, data_path=%s", task, path)
+
+        _, scores = CommonsenseEval(
+            test_dir=path,
+            eval_args=eval_args,
+            task=task,
+        ).eval(agent)
+
+        if dist.get_rank() == 0:
+            logger.info(
+                "Zero-shot %s evaluation results:\n%s",
+                task,
+                scores.to_string(index=False),
+            )
+
+
 @auto_coverage
 def main():
     initialize_megatron(args_defaults={'no_load_rng': True,
@@ -381,6 +450,8 @@ def main():
         pretrained_model_name_or_path=args.load
     )
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name_or_path, trust_remote_code=True, local_files_only=True)
+
+    commonsense(args, LLMChat(args, model, tokenizer))
 
     rank = dist.get_rank()
     if 'cmmlu' in args.task:
