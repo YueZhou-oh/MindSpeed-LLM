@@ -1036,7 +1036,7 @@ def evaluate_and_print_results(prefix, forward_step_func,
                     f'{legacy_name} ppl vs samples', ppl,
                     args.consumed_train_samples)
 
-    if wandb_writer is not None and is_last_rank():
+    if wandb_writer is not None:
         # Periodic evaluation completes the uncommitted training row at the same
         # iteration. Final validation/test runs after training use a new W&B row.
         if ' on validation set' in prefix_lower or ' on test set' in prefix_lower:
@@ -1044,7 +1044,7 @@ def evaluate_and_print_results(prefix, forward_step_func,
         else:
             wandb_writer.log(wandb_metrics, step=iteration)
 
-    if process_non_loss_data_func is not None and writer and is_last_rank():
+    if process_non_loss_data_func is not None:
         process_non_loss_data_func(collected_non_loss_data, iteration, writer)
 
     length = len(string) + 1
