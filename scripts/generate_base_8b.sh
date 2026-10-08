@@ -8,8 +8,13 @@ source /dpc-zhouy/usr/local/Ascend/ascend-toolkit/set_env.sh
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 
 MODEL_NAME="SciLLM-Instruct-8B"
-
 SEQ_LENGTH=4096
+MAX_NEW_TOKENS=1024
+
+# MODEL_NAME="SciLLM-base-8B-8K"
+# SEQ_LENGTH=8192
+# MAX_NEW_TOKENS=1024
+
 # please fill these path configurations
 TOKENIZER_PATH="/dpc-zhouy/zhouy/ckpts/Qwen3-8B"
 # CHECKPOINT="/dpc-zhouy/zhouy/ckpts/SciLLM-base-8B"
@@ -65,7 +70,7 @@ torchrun $DISTRIBUTED_ARGS inference.py \
        --make-vocab-size-divisible-by 1 \
        --padded-vocab-size 151936 \
        --micro-batch-size 1 \
-       --max-new-tokens 256 \
+       --max-new-tokens ${MAX_NEW_TOKENS} \
        --tokenizer-type PretrainedFromHF  \
        --tokenizer-name-or-path ${TOKENIZER_PATH} \
        --tokenizer-not-use-fast \
@@ -79,6 +84,7 @@ torchrun $DISTRIBUTED_ARGS inference.py \
        --exit-on-missing-checkpoint \
        --transformer-impl local \
        --ckpt-format torch \
+       --prompt-type qwen3 \
        --task chat \
        | tee ${LOG_FILE}
 
