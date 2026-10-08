@@ -7,9 +7,13 @@ source /dpc-zhouy/usr/local/Ascend/ascend-toolkit/set_env.sh
 # The number of parameters is not aligned
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 
+MODEL_NAME="SciLLM-Instruct-8B"
+
+SEQ_LENGTH=4096
 # please fill these path configurations
 TOKENIZER_PATH="/dpc-zhouy/zhouy/ckpts/Qwen3-8B"
-CHECKPOINT="/dpc-zhouy/zhouy/ckpts/SciLLM-base-8B"
+# CHECKPOINT="/dpc-zhouy/zhouy/ckpts/SciLLM-base-8B"
+CHECKPOINT="/dpc-zhouy/zhouy/ckpts/${MODEL_NAME}"
 
 # Change for multinode config
 MASTER_ADDR=localhost
@@ -21,7 +25,6 @@ WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
 TP=8
 PP=1
-SEQ_LENGTH=4096
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $NPUS_PER_NODE \
@@ -30,6 +33,11 @@ DISTRIBUTED_ARGS="
     --master_addr $MASTER_ADDR \
     --master_port $MASTER_PORT
 "
+
+TIMESTAMP=$(date '+%Y-%m-%d-%H-%M-%S')
+ITERATION=$(tr -d '[:space:]' < "${CHECKPOINT}/latest_checkpointed_iteration.txt")
+LOG_FILE="./logs_generate/${MODEL_NAME}_rank${NODE_RANK}_iter_${ITERATION}_${TIMESTAMP}.log"
+
 
 torchrun $DISTRIBUTED_ARGS inference.py \
        --use-mcore-models \
@@ -72,7 +80,7 @@ torchrun $DISTRIBUTED_ARGS inference.py \
        --transformer-impl local \
        --ckpt-format torch \
        --task chat \
-       | tee logs_0901/generate_base_8b_chat-test.log
+       | tee ${LOG_FILE}
 
 
 # #!/bin/bash
