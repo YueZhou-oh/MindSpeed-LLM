@@ -53,45 +53,80 @@ class Source:
 # Change `start` independently for any source. Examples:
 #   start=500_000  -> begin at absolute document index 500,000
 #   start=0.25     -> begin at the 25% point of that source
+
+# SOURCES = [
+#     # FLAN family: 25% of the final mixture. The pre-built 5M FLAN mixture is
+#     # deliberately excluded.
+#     Source("cot_fsopt",       1.000000000, 0, f"{DATA_ROOT}/FLAN_4K/cot_fsopt_data",       85_553_325),
+#     Source("cot_zsopt",       1.000000000, 0, f"{DATA_ROOT}/FLAN_4K/cot_zsopt_data",       10_999_763),
+#     Source("dialog_fsopt",    0.016127907, 0, f"{DATA_ROOT}/FLAN_4K/dialog_fsopt_data", 3_911_493_247),
+#     Source("dialog_zsopt",    0.326773023, 0, f"{DATA_ROOT}/FLAN_4K/dialog_zsopt_data",   450_454_761),
+#     Source("flan_fsnoopt",    0.041893846, 0, f"{DATA_ROOT}/FLAN_4K/flan_fsnoopt_data", 10_038_737_670),
+#     Source("flan_fsopt",      0.017129978, 0, f"{DATA_ROOT}/FLAN_4K/flan_fsopt_data",   24_551_188_737),
+#     Source("flan_zsnoopt",    0.234520682, 0, f"{DATA_ROOT}/FLAN_4K/flan_zsnoopt_data",  4_184_320_766),
+#     Source("flan_zsopt",      0.218434002, 0, f"{DATA_ROOT}/FLAN_4K/flan_zsopt_data",    4_492_477_131),
+#     Source("niv2_fsopt",      0.100827678, 0, f"{DATA_ROOT}/FLAN_4K/niv2_fsopt_data",    4_171_090_083),
+#     Source("niv2_zsopt",      0.883584328, 0, f"{DATA_ROOT}/FLAN_4K/niv2_zsopt_data",    1_110_601_138),
+#     Source("t0_fsnoopt",      0.019879355, 0, f"{DATA_ROOT}/FLAN_4K/t0_fsnoopt_data",   16_924_545_796),
+#     Source("t0_fsopt",        0.007541506, 0, f"{DATA_ROOT}/FLAN_4K/t0_fsopt_data",     44_612_983_312),
+#     Source("t0_zsnoopt",      0.114979946, 0, f"{DATA_ROOT}/FLAN_4K/t0_zsnoopt_data",    6_827_693_336),
+#     Source("t0_zsopt",        0.107482749, 0, f"{DATA_ROOT}/FLAN_4K/t0_zsopt_data",      7_303_942_415),
+
+#     # General CoT, chat, science, math, code, safety, and knowledge data.
+#     Source("alpaca_cot",      0.028932761, 0, f"{DATA_ROOT}/alpaca_cot_4K/alpaca_cot_english_no_flan", 38_762_179_933),
+#     Source("nemotron_chat",   1.000000000, 0, f"{DATA_ROOT}/nemotron_bin_4K/chat/chat",                 53_952_947),
+#     Source("nemotron_code",   0.70, 0, f"{DATA_ROOT}/nemotron_bin_4K/code/code_v1.1",        1_855_900_337),
+#     Source("nemotron_math",   0.20, 0, f"{DATA_ROOT}/nemotron_bin_4K/math/math_v1.1",        7_846_816_315),
+#     Source("nemotron_safety", 1.000000, 0, f"{DATA_ROOT}/nemotron_bin_4K/safety/safety",             9_792_134),
+#     Source("nemotron_science",1.000000000, 0, f"{DATA_ROOT}/nemotron_bin_4K/science/science",       1_247_599_518),
+#     Source("fact_seeking",    1.000000000, 0, f"{DATA_ROOT}/nemotron_specialized_4K/fact_seeking/fact_seeking_sharegpt_00000", 89_707_993),
+#     Source("ultrachat",       1.000000000, 0, f"{DATA_ROOT}/ultrachat/ultrachat_4K",                 1_857_242_283),
+#     Source("ultradata_code",  0.50, 0, f"{DATA_ROOT}/ultrachat-sft/Code_4K",                  1_861_175_541),
+
+#     # including chinese
+#     # Source("ultradata_if",    1.000000000, 0, f"{DATA_ROOT}/ultrachat-sft/IF_4K",                       89_399_656),
+#     Source("ultradata_knowledge", 1.000000000, 0, f"{DATA_ROOT}/ultrachat-sft/Knowledge_4K",          364_141_341),
+#     Source("ultradata_math",  0.20, 0, f"{DATA_ROOT}/ultrachat-sft/Math_4K",                  5_810_460_902),
+# ]
+
+# OUTPUT_PREFIX = f"{DATA_ROOT}/final_sft_4K_16b_0922"
+# TARGET_ESTIMATED_TOKENS = 16_000_000_000
+# SEED = 42
+
+
 SOURCES = [
-    # FLAN family: 25% of the final mixture. The pre-built 5M FLAN mixture is
-    # deliberately excluded.
-    Source("cot_fsopt",       1.000000000, 0, f"{DATA_ROOT}/FLAN_4K/cot_fsopt_data",       85_553_325),
-    Source("cot_zsopt",       1.000000000, 0, f"{DATA_ROOT}/FLAN_4K/cot_zsopt_data",       10_999_763),
-    Source("dialog_fsopt",    0.016127907, 0, f"{DATA_ROOT}/FLAN_4K/dialog_fsopt_data", 3_911_493_247),
-    Source("dialog_zsopt",    0.326773023, 0, f"{DATA_ROOT}/FLAN_4K/dialog_zsopt_data",   450_454_761),
-    Source("flan_fsnoopt",    0.041893846, 0, f"{DATA_ROOT}/FLAN_4K/flan_fsnoopt_data", 10_038_737_670),
-    Source("flan_fsopt",      0.017129978, 0, f"{DATA_ROOT}/FLAN_4K/flan_fsopt_data",   24_551_188_737),
-    Source("flan_zsnoopt",    0.234520682, 0, f"{DATA_ROOT}/FLAN_4K/flan_zsnoopt_data",  4_184_320_766),
-    Source("flan_zsopt",      0.218434002, 0, f"{DATA_ROOT}/FLAN_4K/flan_zsopt_data",    4_492_477_131),
-    Source("niv2_fsopt",      0.100827678, 0, f"{DATA_ROOT}/FLAN_4K/niv2_fsopt_data",    4_171_090_083),
-    Source("niv2_zsopt",      0.883584328, 0, f"{DATA_ROOT}/FLAN_4K/niv2_zsopt_data",    1_110_601_138),
-    Source("t0_fsnoopt",      0.019879355, 0, f"{DATA_ROOT}/FLAN_4K/t0_fsnoopt_data",   16_924_545_796),
-    Source("t0_fsopt",        0.007541506, 0, f"{DATA_ROOT}/FLAN_4K/t0_fsopt_data",     44_612_983_312),
-    Source("t0_zsnoopt",      0.114979946, 0, f"{DATA_ROOT}/FLAN_4K/t0_zsnoopt_data",    6_827_693_336),
-    Source("t0_zsopt",        0.107482749, 0, f"{DATA_ROOT}/FLAN_4K/t0_zsopt_data",      7_303_942_415),
+    Source("ownership",       1.000000000, 0, f"{DATA_ROOT}/ownership",       300),
+    Source("honeybee",        1.000000000, 0, f"{DATA_ROOT}/honeybee",       2_307),
+    Source("dialog_fsopt",    0.001, 0.5, f"{DATA_ROOT}/FLAN_4K/dialog_fsopt_data", 3_911_493_247),
+    Source("t0_fsnoopt",      0.0001, 0.5, f"{DATA_ROOT}/FLAN_4K/t0_fsnoopt_data",   16_924_545_796),
+    Source("alpaca_cot",      0.0001, 0.5, f"{DATA_ROOT}/alpaca_cot_4K/alpaca_cot_english_no_flan", 38_762_179_933),
 
-    # General CoT, chat, science, math, code, safety, and knowledge data.
-    Source("alpaca_cot",      0.028932761, 0, f"{DATA_ROOT}/alpaca_cot_4K/alpaca_cot_english_no_flan", 38_762_179_933),
-    Source("nemotron_chat",   1.000000000, 0, f"{DATA_ROOT}/nemotron_bin_4K/chat/chat",                 53_952_947),
-    Source("nemotron_code",   0.70, 0, f"{DATA_ROOT}/nemotron_bin_4K/code/code_v1.1",        1_855_900_337),
-    Source("nemotron_math",   0.20, 0, f"{DATA_ROOT}/nemotron_bin_4K/math/math_v1.1",        7_846_816_315),
-    Source("nemotron_safety", 1.000000, 0, f"{DATA_ROOT}/nemotron_bin_4K/safety/safety",             9_792_134),
-    Source("nemotron_science",1.000000000, 0, f"{DATA_ROOT}/nemotron_bin_4K/science/science",       1_247_599_518),
-    Source("fact_seeking",    1.000000000, 0, f"{DATA_ROOT}/nemotron_specialized_4K/fact_seeking/fact_seeking_sharegpt_00000", 89_707_993),
-    Source("ultrachat",       1.000000000, 0, f"{DATA_ROOT}/ultrachat/ultrachat_4K",                 1_857_242_283),
-    Source("ultradata_code",  0.50, 0, f"{DATA_ROOT}/ultrachat-sft/Code_4K",                  1_861_175_541),
+    Source("flan_zsnoopt",    0.001, 0.5, f"{DATA_ROOT}/FLAN_4K/flan_zsnoopt_data",  4_184_320_766),
+    Source("flan_zsopt",      0.001, 0.5, f"{DATA_ROOT}/FLAN_4K/flan_zsopt_data",    4_492_477_131),
 
-    # including chinese
-    # Source("ultradata_if",    1.000000000, 0, f"{DATA_ROOT}/ultrachat-sft/IF_4K",                       89_399_656),
-    Source("ultradata_knowledge", 1.000000000, 0, f"{DATA_ROOT}/ultrachat-sft/Knowledge_4K",          364_141_341),
-    Source("ultradata_math",  0.20, 0, f"{DATA_ROOT}/ultrachat-sft/Math_4K",                  5_810_460_902),
+    Source("nemotron_code",   0.02, 0.8, f"{DATA_ROOT}/nemotron_bin_4K/code/code_v1.1",        1_855_900_337),
+    Source("nemotron_math",   0.01, 0.5, f"{DATA_ROOT}/nemotron_bin_4K/math/math_v1.1",        7_846_816_315),
+    Source("nemotron_science",0.02, 0.5, f"{DATA_ROOT}/nemotron_bin_4K/science/science",       1_247_599_518),
 ]
 
-
-OUTPUT_PREFIX = f"{DATA_ROOT}/final_sft_4K_16b_0922"
-TARGET_ESTIMATED_TOKENS = 16_000_000_000
+OUTPUT_PREFIX = f"{DATA_ROOT}/added_sft_4K_100k_1010"
+TARGET_ESTIMATED_TOKENS = 100_000
 SEED = 42
+
+'''
+ownership              available=        300 fraction= 1.000000 start=          0 selected=       300
+honeybee               available=      2,307 fraction= 1.000000 start=          0 selected=     2,307
+dialog_fsopt           available=  5,425,015 fraction= 0.001000 start=  2,712,507 selected=     5,425
+t0_fsnoopt             available= 32,191,051 fraction= 0.000100 start= 16,095,525 selected=     3,219
+alpaca_cot             available= 80,403,819 fraction= 0.000100 start= 40,201,909 selected=     8,040
+flan_zsnoopt           available= 37,384,598 fraction= 0.001000 start= 18,692,299 selected=    37,385
+flan_zsopt             available= 38,970,972 fraction= 0.001000 start= 19,485,486 selected=    38,971
+nemotron_code          available=    496,206 fraction= 0.020000 start=    396,964 selected=     9,924
+nemotron_math          available=  2,225,427 fraction= 0.010000 start=  1,112,713 selected=    22,254
+nemotron_science       available=    708,920 fraction= 0.020000 start=    354,460 selected=    14,178
+Total selected documents: 142,003
+Estimated stored tokens: 158,697,731
+'''
 
 KEYS = [
     "input_ids",
