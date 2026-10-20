@@ -94,24 +94,24 @@ class Source:
 # SEED = 42
 
 
-SOURCES = [
-    Source("ownership",       1.000000000, 0, f"{DATA_ROOT}/ownership",       300),
-    Source("honeybee",        1.000000000, 0, f"{DATA_ROOT}/honeybee",       2_307),
-    Source("dialog_fsopt",    0.001, 0.5, f"{DATA_ROOT}/FLAN_4K/dialog_fsopt_data", 3_911_493_247),
-    Source("t0_fsnoopt",      0.0001, 0.5, f"{DATA_ROOT}/FLAN_4K/t0_fsnoopt_data",   16_924_545_796),
-    Source("alpaca_cot",      0.0001, 0.5, f"{DATA_ROOT}/alpaca_cot_4K/alpaca_cot_english_no_flan", 38_762_179_933),
+# SOURCES = [
+#     Source("ownership",       1.000000000, 0, f"{DATA_ROOT}/ownership/ownership_qa",       300),
+#     Source("honeybee",        1.000000000, 0, f"{DATA_ROOT}/honeybee",       2_307),
+#     Source("dialog_fsopt",    0.001, 0.5, f"{DATA_ROOT}/FLAN_4K/dialog_fsopt_data", 3_911_493_247),
+#     Source("t0_fsnoopt",      0.0001, 0.5, f"{DATA_ROOT}/FLAN_4K/t0_fsnoopt_data",   16_924_545_796),
+#     Source("alpaca_cot",      0.0001, 0.5, f"{DATA_ROOT}/alpaca_cot_4K/alpaca_cot_english_no_flan", 38_762_179_933),
 
-    Source("flan_zsnoopt",    0.001, 0.5, f"{DATA_ROOT}/FLAN_4K/flan_zsnoopt_data",  4_184_320_766),
-    Source("flan_zsopt",      0.001, 0.5, f"{DATA_ROOT}/FLAN_4K/flan_zsopt_data",    4_492_477_131),
+#     Source("flan_zsnoopt",    0.001, 0.5, f"{DATA_ROOT}/FLAN_4K/flan_zsnoopt_data",  4_184_320_766),
+#     Source("flan_zsopt",      0.001, 0.5, f"{DATA_ROOT}/FLAN_4K/flan_zsopt_data",    4_492_477_131),
 
-    Source("nemotron_code",   0.02, 0.8, f"{DATA_ROOT}/nemotron_bin_4K/code/code_v1.1",        1_855_900_337),
-    Source("nemotron_math",   0.01, 0.5, f"{DATA_ROOT}/nemotron_bin_4K/math/math_v1.1",        7_846_816_315),
-    Source("nemotron_science",0.02, 0.5, f"{DATA_ROOT}/nemotron_bin_4K/science/science",       1_247_599_518),
-]
+#     Source("nemotron_code",   0.02, 0.8, f"{DATA_ROOT}/nemotron_bin_4K/code/code_v1.1",        1_855_900_337),
+#     Source("nemotron_math",   0.01, 0.5, f"{DATA_ROOT}/nemotron_bin_4K/math/math_v1.1",        7_846_816_315),
+#     Source("nemotron_science",0.02, 0.5, f"{DATA_ROOT}/nemotron_bin_4K/science/science",       1_247_599_518),
+# ]
 
-OUTPUT_PREFIX = f"{DATA_ROOT}/added_sft_4K_100k_1010"
-TARGET_ESTIMATED_TOKENS = 100_000
-SEED = 42
+# OUTPUT_PREFIX = f"{DATA_ROOT}/added_sft_4K_100k_1016"
+# TARGET_ESTIMATED_TOKENS = 100_000
+# SEED = 42
 
 '''
 ownership              available=        300 fraction= 1.000000 start=          0 selected=       300
@@ -126,7 +126,69 @@ nemotron_math          available=  2,225,427 fraction= 0.010000 start=  1,112,71
 nemotron_science       available=    708,920 fraction= 0.020000 start=    354,460 selected=    14,178
 Total selected documents: 142,003
 Estimated stored tokens: 158,697,731
+Written 100,000/142,003
+Finished: /dpc-zhouy/zhouy/instructft_data/added_sft_4K_100k_1016
+Training DATA_PATH="/dpc-zhouy/zhouy/instructft_data/added_sft_4K_100k_1016"
 '''
+
+# SOURCES = [
+#     # FLAN family: 25% of the final mixture. The pre-built 5M FLAN mixture is
+#     # deliberately excluded.
+#     Source("cot_fsopt",       1.000000000, 0, f"{DATA_ROOT}/FLAN_4K/cot_fsopt_data",       85_553_325),
+#     Source("cot_zsopt",       1.000000000, 0, f"{DATA_ROOT}/FLAN_4K/cot_zsopt_data",       10_999_763),
+#     Source("dialog_fsopt",    0.016127907, 0, f"{DATA_ROOT}/FLAN_4K/dialog_fsopt_data", 3_911_493_247),
+#     Source("dialog_zsopt",    0.326773023, 0, f"{DATA_ROOT}/FLAN_4K/dialog_zsopt_data",   450_454_761),
+#     Source("flan_fsnoopt",    0.041893846, 0, f"{DATA_ROOT}/FLAN_4K/flan_fsnoopt_data", 10_038_737_670),
+#     Source("flan_fsopt",      0.017129978, 0, f"{DATA_ROOT}/FLAN_4K/flan_fsopt_data",   24_551_188_737),
+#     Source("flan_zsnoopt",    0.234520682, 0, f"{DATA_ROOT}/FLAN_4K/flan_zsnoopt_data",  4_184_320_766),
+#     Source("flan_zsopt",      0.218434002, 0, f"{DATA_ROOT}/FLAN_4K/flan_zsopt_data",    4_492_477_131),
+#     Source("niv2_fsopt",      0.100827678, 0, f"{DATA_ROOT}/FLAN_4K/niv2_fsopt_data",    4_171_090_083),
+#     Source("niv2_zsopt",      0.883584328, 0, f"{DATA_ROOT}/FLAN_4K/niv2_zsopt_data",    1_110_601_138),
+#     Source("t0_fsnoopt",      0.019879355, 0, f"{DATA_ROOT}/FLAN_4K/t0_fsnoopt_data",   16_924_545_796),
+#     Source("t0_fsopt",        0.007541506, 0, f"{DATA_ROOT}/FLAN_4K/t0_fsopt_data",     44_612_983_312),
+#     Source("t0_zsnoopt",      0.114979946, 0, f"{DATA_ROOT}/FLAN_4K/t0_zsnoopt_data",    6_827_693_336),
+#     Source("t0_zsopt",        0.107482749, 0, f"{DATA_ROOT}/FLAN_4K/t0_zsopt_data",      7_303_942_415),
+
+#     # General CoT, chat, science, math, code, safety, and knowledge data.
+#     Source("alpaca_cot",      0.028932761, 0, f"{DATA_ROOT}/alpaca_cot_4K/alpaca_cot_english_no_flan_no_moss", 38_762_179_933),
+#     Source("nemotron_chat",   1.000000000, 0, f"{DATA_ROOT}/nemotron_bin_4K/chat/chat",                 53_952_947),
+#     Source("nemotron_code",   0.70, 0, f"{DATA_ROOT}/nemotron_bin_4K/code/code_v1.1",        1_855_900_337),
+#     Source("nemotron_math",   0.20, 0, f"{DATA_ROOT}/nemotron_bin_4K/math/math_v1.1",        7_846_816_315),
+#     Source("nemotron_safety", 1.000000, 0, f"{DATA_ROOT}/nemotron_bin_4K/safety/safety",             9_792_134),
+#     Source("nemotron_science",1.000000000, 0, f"{DATA_ROOT}/nemotron_bin_4K/science/science",       1_247_599_518),
+#     Source("fact_seeking",    1.000000000, 0, f"{DATA_ROOT}/nemotron_specialized_4K/fact_seeking/fact_seeking_sharegpt_00000", 89_707_993),
+#     Source("ultrachat",       1.000000000, 0, f"{DATA_ROOT}/ultrachat/ultrachat_4K",                 1_857_242_283),
+#     Source("ultradata_code",  0.50, 0, f"{DATA_ROOT}/ultrachat-sft/Code_4K",                  1_861_175_541),
+
+#     # including chinese
+#     # Source("ultradata_if",    1.000000000, 0, f"{DATA_ROOT}/ultrachat-sft/IF_4K",                       89_399_656),
+#     Source("ultradata_knowledge", 1.000000000, 0, f"{DATA_ROOT}/ultrachat-sft/Knowledge_4K",          364_141_341),
+#     Source("ultradata_math",  0.20, 0, f"{DATA_ROOT}/ultrachat-sft/Math_4K",                  5_810_460_902),
+#     Source("honeybee",        1.000000000, 0, f"{DATA_ROOT}/honeybee",       2_307),
+#     Source("ownership",       1.000000000, 0, f"{DATA_ROOT}/ownership/ownership_qa",       300),
+# ]
+
+# OUTPUT_PREFIX = f"{DATA_ROOT}/final_woqa_sft_4K_16b_1019"
+# TARGET_ESTIMATED_TOKENS = 16_000_000_000
+# SEED = 42
+
+SOURCES = [
+    Source("band_gap", 1.000000000, 0, "/dpc-zhouy/zhouy/post-training-data/LLM4MAT-Bench/mp_sciowl_jsonl/bins/band_gap/train",          1_116_341),
+    Source("density", 1.000000000, 0, "/dpc-zhouy/zhouy/post-training-data/LLM4MAT-Bench/mp_sciowl_jsonl/bins/density/train",          1_116_341),
+    Source("density_atomic", 1.000000000, 0, "/dpc-zhouy/zhouy/post-training-data/LLM4MAT-Bench/mp_sciowl_jsonl/bins/density_atomic/train",          1_116_341),
+    Source("efermi", 1.000000000, 0, "/dpc-zhouy/zhouy/post-training-data/LLM4MAT-Bench/mp_sciowl_jsonl/bins/efermi/train",          1_116_341),
+    Source("energy_above_hull", 1.000000000, 0, "/dpc-zhouy/zhouy/post-training-data/LLM4MAT-Bench/mp_sciowl_jsonl/bins/energy_above_hull/train",          1_116_341),
+    Source("energy_per_atom", 1.000000000, 0, "/dpc-zhouy/zhouy/post-training-data/LLM4MAT-Bench/mp_sciowl_jsonl/bins/energy_per_atom/train",          1_116_341),
+    Source("formation_energy_per_atom", 1.000000000, 0, "/dpc-zhouy/zhouy/post-training-data/LLM4MAT-Bench/mp_sciowl_jsonl/bins/formation_energy_per_atom/train",          1_116_341),
+    Source("is_gap_direct", 1.000000000, 0, "/dpc-zhouy/zhouy/post-training-data/LLM4MAT-Bench/mp_sciowl_jsonl/bins/is_gap_direct/train",          1_116_341),
+    Source("is_stable", 1.000000000, 0, "/dpc-zhouy/zhouy/post-training-data/LLM4MAT-Bench/mp_sciowl_jsonl/bins/is_stable/train",          1_116_341),
+    Source("volume", 1.000000000, 0, "/dpc-zhouy/zhouy/post-training-data/LLM4MAT-Bench/mp_sciowl_jsonl/bins/volume/train",          1_116_341),
+]
+
+# OUTPUT_PREFIX = f"{DATA_ROOT}/llm4mat_mp_all_tasks"
+OUTPUT_PREFIX = "/var/lib/paascontainer/llm4mat_mp_all_tasks"
+TARGET_ESTIMATED_TOKENS = 12_000_000
+SEED = 42
 
 KEYS = [
     "input_ids",
@@ -215,7 +277,9 @@ def main():
         count = int(round(available * source.fraction))
         start_index = resolve_start(source.start, available, source.name)
         indices = circular_indices(available, count, start_index)
-        rng.shuffle(indices)
+
+        # commented out because of slow read speed of c3, no problem on c2.5
+        # rng.shuffle(indices)
 
         datasets.append(group)
         counts.append(count)
