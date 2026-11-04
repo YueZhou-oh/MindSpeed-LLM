@@ -698,10 +698,30 @@ class Mg2HfConvert(Convert):
         # presence and inequality with num_attention_heads, NOT by the
         # group_query_attention flag saved in mg checkpoint (which is unreliable).
         nh = self.load_model.num_attention_heads
-        if hasattr(self.load_model, 'num_key_value_heads') and self.load_model.num_key_value_heads != nh:
-            ng = self.load_model.num_key_value_heads
-        else:
+
+        # fix bug for qwen3 moe mg2hf
+        # if hasattr(self.load_model, 'num_key_value_heads') and self.load_model.num_key_value_heads != nh:
+        #     ng = self.load_model.num_key_value_heads
+        # else:
+        #     ng = nh
+
+        # Megatron uses num_query_groups; HF uses num_key_value_heads.
+        ng = getattr(self.load_model, "num_query_groups", None)
+        if ng is None:
+            ng = getattr(self.load_model, "num_key_value_heads", None)
+        if ng is None:
+            if getattr(self.load_model, "group_query_attention", False):
+                raise ValueError(
+                    "GQA checkpoint has neither num_query_groups "
+                    "nor num_key_value_heads"
+                )
             ng = nh
+
+        ng = int(ng)
+        if ng <= 0 or nh % ng != 0:
+            raise ValueError(f"Invalid attention configuration: nh={nh}, ng={ng}")
+
+        logger.info("QKV conversion: query_heads=%s, kv_heads=%s", nh, ng)
 
         if self.load_model.qkv_type == "pack_mla":
             linear_proj_list = []
