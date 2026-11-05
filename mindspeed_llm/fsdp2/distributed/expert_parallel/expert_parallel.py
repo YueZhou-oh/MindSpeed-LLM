@@ -66,6 +66,11 @@ def apply_common_experts_forward(module: torch.nn.Module, ep_mesh: DeviceMesh, p
 
 
 def apply_expert_parallel_forward(module: torch.nn.Module, ep_mesh: DeviceMesh, plan: EPPlanConfig):
+    if plan.dispatcher == 'megamoe':
+        from mindspeed_llm.fsdp2.models.qwen3.qwen3_moe import Qwen3MoeExperts
+
+        if not isinstance(module, Qwen3MoeExperts):
+            raise ValueError("MegaMoE currently requires grouped Qwen3 MoE experts (moe_grouped_gemm=true).")
     if hasattr(module, 'zero_expert_num') and module.zero_expert_num > 0:
         apply_zero_experts_forward(module, ep_mesh, plan)
     else:
@@ -125,6 +130,15 @@ def distribute_experts_module(module: torch.nn.Module, ep_mesh: DeviceMesh):
 
 
 def get_dispatcher_fn(dispatcher, ep_group, fixed_router=False):
+    if dispatcher == 'megamoe':
+        if fixed_router:
+            raise ValueError("MegaMoE does not support the fixed debug router.")
+        from mindspeed_llm.fsdp2.distributed.expert_parallel.dispatcher_megamoe import (
+            get_experts_forward_megamoe_fn,
+        )
+
+        return get_experts_forward_megamoe_fn(ep_group)
+
     forward_fn = None
     if isinstance(dispatcher, Callable):
         forward_fn = partial(dispatcher, ep_group)

@@ -33,7 +33,7 @@ class CPPlanConfig:
 @dataclass
 class EPPlanConfig:
     apply_modules: List[str] = None
-    dispatcher: Union[Literal["eager", "fused", "mc2"], Callable] = None
+    dispatcher: Union[Literal["eager", "fused", "mc2", "megamoe"], Callable] = None
     apply_efsdp_modules: List[str] = None
     gradient_divide_factor: Optional[float] = None
     fixed_router: bool = False
@@ -151,7 +151,7 @@ class ParallelEngineConfig:
         config = ParallelEngineConfig(
             ep_plan=EPPlanConfig(
                 apply_modules: ['*mlp.experts*'],
-                dispatcher: 'eager', 'fused', 'mc2'
+                dispatcher: 'eager', 'fused', 'mc2', 'megamoe'
             )
         )
         '''

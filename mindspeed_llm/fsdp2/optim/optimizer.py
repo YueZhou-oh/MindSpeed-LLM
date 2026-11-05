@@ -264,6 +264,7 @@ class OptimizerFactory:
         param_groups: Optional[Sequence[Dict[str, Any]]] = None,
         no_decay_modules: Optional[List[str]] = None,
         no_decay_params: Optional[List[str]] = None,
+        muon_ns_variant: str = "legacy",
     ) -> torch.optim.Optimizer:
         """
         Build optimizer instance
@@ -295,6 +296,7 @@ class OptimizerFactory:
                 param_groups=param_groups,
                 no_decay_modules=no_decay_modules,
                 no_decay_params=no_decay_params,
+                muon_ns_variant=muon_ns_variant,
             )
 
         # Single Optimizer Processing
@@ -308,6 +310,7 @@ class OptimizerFactory:
             param_groups=param_groups,
             no_decay_modules=no_decay_modules,
             no_decay_params=no_decay_params,
+            muon_ns_variant=muon_ns_variant,
         )
         return single_optimizer
 
@@ -322,6 +325,7 @@ class OptimizerFactory:
         param_groups,
         no_decay_modules,
         no_decay_params,
+        muon_ns_variant: str = "legacy",
     ):
         """
         Create single optimizer instance.
@@ -402,6 +406,7 @@ class OptimizerFactory:
             weight_decay=weight_decay,
             muon_params=muon_params,
             adamw_params=adamw_params,
+            muon_ns_variant=muon_ns_variant,
         )
 
         logger.info_rank0(
@@ -419,6 +424,7 @@ class OptimizerFactory:
         weight_decay: float,
         muon_params: Optional[List[nn.Parameter]] = None,
         adamw_params: Optional[List[nn.Parameter]] = None,
+        muon_ns_variant: str = "legacy",
     ) -> Optimizer:
         """
         Unified optimizer instantiation entry point, add branches here for newly extended optimizers
@@ -456,6 +462,7 @@ class OptimizerFactory:
                 adamw_params=adamw_params,
                 adamw_betas=betas,
                 adamw_eps=eps,
+                ns_variant=muon_ns_variant,
             )
         else:
             raise ValueError(
@@ -514,6 +521,7 @@ class OptimizerFactory:
         param_groups: Optional[List[Dict[str, Any]]],
         no_decay_modules: Optional[List[str]],
         no_decay_params: Optional[List[str]],
+        muon_ns_variant: str = "legacy",
     ) -> MultiOptimizer:
         ep_groups: List[Dict[str, Any]] = []
         non_ep_groups: List[Dict[str, Any]] = []
@@ -611,6 +619,7 @@ class OptimizerFactory:
                 weight_decay=weight_decay,
                 muon_params=muon_params,
                 adamw_params=adamw_params,
+                muon_ns_variant=muon_ns_variant,
             )
 
         # Build EP/non-EP optimizer dictionary

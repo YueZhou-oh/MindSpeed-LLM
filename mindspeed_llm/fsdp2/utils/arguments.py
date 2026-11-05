@@ -428,13 +428,13 @@ class ParallelArguments:
         default_factory=lambda: ['model.layers.{*}.mlp.experts'],
         metadata={"help": "Model structure of layers with FSDP inside Expert Parallel groups."},
     )
-    ep_dispatcher: Literal["eager", "fused", "mc2"] = field(
+    ep_dispatcher: Literal["eager", "fused", "mc2", "megamoe"] = field(
         default="eager",
         metadata={
             "help": "Dispatcher strategy for Expert Parallel (MoE). "
             "Options: 'eager' (immediate token dispatch to experts, default), "
             "'fused' (fused routing & expert computation for higher throughput), "
-            "'mc2' (mixed compression dispatch to reduce cross-card communication cost). Defaults to 'eager'."
+            "'mc2' (fused EP communication and matmul), 'megamoe' (experimental HyperParallel native EP)."
         },
     )
     recompute_modules: List[str] = field(
@@ -492,6 +492,8 @@ class ParallelArguments:
     )
 
     def __post_init__(self):
+        if self.ep_dispatcher == "megamoe" and self.ep_size <= 1:
+            raise ValueError("MegaMoE requires ep_size greater than one.")
         if self.fsdp_modules is None:
             raise ValueError(
                 "Parameter 'fsdp_modules' cannot be None! Please provide a non-empty list of module paths (e.g. ['model.layers.{*}'])."
@@ -518,6 +520,10 @@ class TrainingArguments:
     optimizer: Literal["adamw", "muon", "fused_adamw"] = field(
         default="adamw",
         metadata={"help": "Optimizer. Default to adamw."},
+    )
+    muon_ns_variant: Literal["legacy", "asym5"] = field(
+        default="legacy",
+        metadata={"help": "Muon orthogonalization: legacy local shards or asym5 on full logical matrices."},
     )
     lr: float = field(default=1e-5, metadata={"help": "The initial learning rate."})
     weight_decay: float = field(default=0.01, metadata={"help": "Weight decay if we apply some."})

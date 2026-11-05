@@ -219,6 +219,7 @@ class MindSpeedAutoTrainer:
             weight_decay=self.training_args.weight_decay,
             betas=(self.training_args.adam_beta1, self.training_args.adam_beta2),
             adam_epsilon=self.training_args.adam_epsilon,
+            muon_ns_variant=self.training_args.muon_ns_variant,
         )
 
     def _build_scheduler(self, optimizer):
