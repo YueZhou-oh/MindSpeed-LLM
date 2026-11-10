@@ -242,12 +242,20 @@ def task_chat(args, model):
         if terminate_runs > 0:
             break
 
+        # responses = model.generate(
+        #     instruction,
+        #     do_sample=True,
+        #     top_k=args.top_k,
+        #     top_p=args.top_p,
+        #     temperature=args.temperature,
+        #     max_new_tokens=args.max_new_tokens,
+        #     stream=True,
+        #     broadcast=True,
+        # )
+
         responses = model.generate(
             instruction,
-            do_sample=True,
-            top_k=args.top_k,
-            top_p=args.top_p,
-            temperature=args.temperature,
+            do_sample=False,
             max_new_tokens=args.max_new_tokens,
             stream=True,
             broadcast=True,
