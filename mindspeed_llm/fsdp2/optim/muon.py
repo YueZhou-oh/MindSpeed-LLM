@@ -4,34 +4,37 @@ import math
 import torch
 
 try:
-    from torch.distributed.tensor import DTensor
+    from torch.distributed.tensor import DTensor, Replicate
 except ImportError:
     DTensor = None
 
 
-def zeropower_via_newtonschulz5(G: "torch.Tensor", steps: int) -> "torch.Tensor":
-    """Newton-Schulz iteration to compute the zeroth power / orthogonalization of G.
+# Five-step asymmetric schedule also used by HyperParallel and MindSpeed Core.
+_ASYM5_COEFFICIENTS = (
+    (4.0848, -6.8946, 2.9270),
+    (3.9505, -6.3029, 2.6377),
+    (3.7418, -5.5913, 2.3037),
+    (2.8769, -3.1427, 1.2046),
+    (2.8366, -3.0525, 1.2012),
+)
 
-    We opt to use a quintic iteration whose coefficients are selected to maximize the slope at zero.
-    For the purpose of minimizing steps, it turns out to be empirically effective to keep increasing
-    the slope at zero even beyond the point where the iteration no longer converges all the way to
-    one everywhere on the interval. This iteration therefore does not produce UV^T but rather something
-    like US'V^T where S' is diagonal with S_{ii}' ~ Uniform(0.5, 1.5), which turns out not to hurt model
-    performance at all relative to UV^T, where USV^T = G is the SVD.
-    """
-    # Unpack DTensor, extract local tensor shards for computation
-    is_dtensor = False
-    original_dtensor_meta = None
-    if type(G).__name__ == 'DTensor':
-        is_dtensor = True
-        original_dtensor_meta = G
-        G = G.to_local()
 
-    if len(G.shape) != 2:
-        raise ValueError(
-            f"Expected input tensor G to be 2-dimensional, but got {len(G.shape)}-dimensional tensor with shape {G.shape}."
-        )
-    a, b, c = (3.4445, -4.7750, 2.0315)
+def zeropower_via_newtonschulz5(G: "torch.Tensor", steps: int, variant: str = "legacy") -> "torch.Tensor":
+    """Orthogonalize a matrix with legacy or asymmetric Newton-Schulz steps."""
+    if variant == "legacy":
+        coefficients = ((3.4445, -4.7750, 2.0315),) * steps
+    elif variant == "asym5" and 1 <= steps <= len(_ASYM5_COEFFICIENTS):
+        coefficients = _ASYM5_COEFFICIENTS[:steps]
+    else:
+        raise ValueError("Muon requires legacy, or asym5 with one to five Newton-Schulz steps.")
+
+    distributed = DTensor is not None and isinstance(G, DTensor)
+    original = G
+    if distributed:
+        # Asym5 uses the logical matrix rather than independently normalizing each shard.
+        G = G.full_tensor() if variant == "asym5" else G.to_local()
+    if G.ndim != 2:
+        raise ValueError(f"Muon expects a matrix, got shape {tuple(G.shape)}.")
     # Convert to float32 to prevent NaN values
     X = G.float()
     if G.size(0) > G.size(1):
@@ -39,7 +42,7 @@ def zeropower_via_newtonschulz5(G: "torch.Tensor", steps: int) -> "torch.Tensor"
     # Ensure spectral norm is at most 1
     X = X / (X.norm() + 1e-7)
     # Perform the NS iterations
-    for _ in range(steps):
+    for a, b, c in coefficients:
         A = X @ X.T
         B = b * A + c * A @ A
         X = a * X + B @ X
@@ -47,11 +50,17 @@ def zeropower_via_newtonschulz5(G: "torch.Tensor", steps: int) -> "torch.Tensor"
     if G.size(0) > G.size(1):
         X = X.T
 
-    # Pack DTensor, integrate local computation results into distributed tensor
-    if is_dtensor:
-        result = DTensor.from_local(X, original_dtensor_meta.device_mesh, original_dtensor_meta.placements)
-
-    return result
+    if not distributed:
+        return X
+    if variant == "asym5":
+        replicated = DTensor.from_local(
+            X, original.device_mesh, tuple(Replicate() for _ in original.placements),
+        )
+        return replicated.redistribute(placements=original.placements)
+    return DTensor.from_local(
+        X, original.device_mesh, original.placements,
+        shape=original.shape, stride=original.stride(),
+    )
 
 
 class Muon(torch.optim.Optimizer):
@@ -71,7 +80,8 @@ class Muon(torch.optim.Optimizer):
         lr: The learning rate. The updates will have spectral norm of `lr`. (0.02 is a good default)
         momentum: The momentum used by the internal SGD. (0.95 is a good default)
         nesterov: Whether to use Nesterov-style momentum in the internal SGD. (recommended)
-        ns_steps: The number of Newton-Schulz iterations to run. (6 is probably always enough)
+        ns_steps: The number of Newton-Schulz iterations.
+        ns_variant: Use the legacy local update or Asym5 on the full logical matrix.
         adamw_params: The parameters to be optimized by AdamW. Any parameters in `muon_params` which are
         {0, 1}-D or are detected as being the embed or lm_head will be optimized by AdamW as well.
         adamw_lr: The learning rate for the internal AdamW.
@@ -91,18 +101,23 @@ class Muon(torch.optim.Optimizer):
             adamw_params=None,
             adamw_betas=(0.9, 0.95),
             adamw_eps=1e-8,
+            ns_variant="legacy",
     ):
+        if ns_variant not in ("legacy", "asym5") or (ns_variant == "asym5" and not 1 <= ns_steps <= 5):
+            raise ValueError("Muon requires legacy, or asym5 with one to five Newton-Schulz steps.")
         defaults = dict(
             lr=lr,
             wd=wd,
             momentum=momentum,
             nesterov=nesterov,
             ns_steps=ns_steps,
+            ns_variant=ns_variant,
             adamw_betas=adamw_betas,
             adamw_eps=adamw_eps,
         )
 
-        params = list(muon_params)
+        muon_params = list(muon_params)
+        params = muon_params.copy()
         adamw_params = list(adamw_params) if adamw_params is not None else []
         params.extend(adamw_params)
         super().__init__(params, defaults)
@@ -162,7 +177,7 @@ class Muon(torch.optim.Optimizer):
                     g = g.add(buf, alpha=momentum)
                 else:
                     g = buf
-                u = zeropower_via_newtonschulz5(g, steps=group["ns_steps"])
+                u = zeropower_via_newtonschulz5(g, group["ns_steps"], group.get("ns_variant", "legacy"))
 
                 # scale update
                 adjusted_lr = self.adjust_lr_for_muon(lr, p.shape)
